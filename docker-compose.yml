@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: ./src/front-end
+    ports:
+      - '5173:80'  # Or '3000:3000' if using a dev server
+    depends_on:
+      - backend
+
+  backend:
+    build: ./src/back-end
+    ports:
+      - '3000:3000'
+    volumes:
+      - sqlite-data:/app/data  # Persist the SQLite DB
+
+volumes:
+  sqlite-data:
