@@ -1,39 +1,23 @@
-// server.js
-/*
-const Fastify = require('fastify')
-
-const fastify = Fastify({ logger: true })
-
-fastify.get('/', async (request, reply) => {
-  return { hello: 'world' }
-})
-
-const start = async () => {
-  try {
-    await fastify.listen({ port: 3000 })
-  } catch (err) {
-    fastify.log.error(err)
-    process.exit(1)
-  }
-}
-start()
-*/
-import Fastify from 'fastify';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
+const Fastify = require('fastify');
+const sqlite3 = require('sqlite3');
+const { open } = require('sqlite');
 
 const start = async () => {
   const fastify = Fastify();
 
-  const db = await open({
-    filename: './data.db',
-    driver: sqlite3.Database,
-  });
+  // const db = await open({
+  //   filename: './data.db',
+  //   driver: sqlite3.Database,
+  // });
 
-  fastify.get('/api/data', async (req, reply) => {
-    const result = await db.all('SELECT * FROM your_table');
-    return result;
-  });
+  // /**
+  //  * @param {import('fastify').FastifyRequest} req
+  //  * @param {import('fastify').FastifyReply} reply
+  //  */
+  // fastify.get('/api/data', async (req, reply) => {
+  //   const result = await db.all('SELECT * FROM your_table');
+  //   return result;
+  // });
 
   await fastify.listen({ port: 3000, host: '0.0.0.0' });
 };
