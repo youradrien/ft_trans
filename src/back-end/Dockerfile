@@ -1,15 +1,19 @@
-FROM node:24
+# ./src/back-end/Dockerfile
+
+FROM node:18
 
 # Create app directory
 WORKDIR /app
 
+# Copy package.json and package-lock.json (if exists)
+COPY package*.json ./
+
 # Install app dependencies
-#COPY package*.json ./
 RUN npm install
 
-# Bundle app source
-#COPY . .
+# Copy the rest of the app
+COPY . .
 
+# Expose port and start
 EXPOSE 3000
-CMD ["npm", "run", "dev"]
-
+CMD ["npm", "start"]

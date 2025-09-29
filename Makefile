@@ -3,20 +3,13 @@ all : up
 up :
 	docker compose -f docker-compose.yml up --build -d
 
-# Start only the frontend service
-front:
-	docker-compose up -d frontend
 
-# Start only the backend service
-back:
-	docker-compose up -d backend
-
-# Start both services
+# start both services
 up:
 	docker-compose up -d
 
 # stop and clear all containers
-stop:
+fclean:
 	docker-compose stop
 	docker-compose down -v
 	docker image prune -f
