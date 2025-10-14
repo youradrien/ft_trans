@@ -21,6 +21,14 @@ fastify.decorate("matchsMap", new Map());
 fastify.decorate("closedWsUsersSet", new Set());
 
 
+// register CORS (our frontend)
+fastify.register(cors, {
+  origin: 'http://127.0.0.1:5173', // ✅ must match EXACTLY
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+});
+
 // JWT
 fastify.register(cookie);
 fastify.register(multipart);
@@ -32,13 +40,6 @@ fastify.register(jwt, {
         }
 });
 
-// register CORS
-fastify.register(cors, {
-  origin:['https://localhost:4430'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-});
 // register routes
 fastify.register(require('./routes/users.js'));
 // fastify.register(require('./routes/matchmaking.js'));
@@ -57,6 +58,21 @@ const start = async () => {
 };
 start();
 
+// last time seen (user field)
+fastify.decorate('updateLastOnline', async function(userId) {
+  if (!userId) return; // guard clause
+
+  try {
+    await fastify.db.run(
+      "UPDATE users SET last_online = datetime('now') WHERE id = ?",
+      [userId]
+    );
+  } catch (err) {
+    fastify.log.error(`Failed to update last_online for user ${userId}:`, err);
+  }
+});
+
+// authentification "middleware"
 fastify.decorate("authenticate", async function(request, reply)
 {
     try {
@@ -74,6 +90,8 @@ fastify.decorate("authenticate", async function(request, reply)
         return reply.code(401).send({success:false, error:"invalid_token"})    
     }
 });
+
+
 
 
 // Route GET /api (pour tests uniquement)

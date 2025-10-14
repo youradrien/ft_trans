@@ -7,7 +7,8 @@ export default class MainPage extends Page {
     const container = document.createElement('div');
     container.id = this.id;
     container.innerHTML = `
-      <h1>Welcome to Transcendance</h1>
+      <h1>Transcendance</h1>
+      <h2>Home</h2>
       <button id="playBtn">Play</button>
       <button id="leaderboardBtn">Leaderboard</button>
       <button id="friendsBtn">Friends</button>

@@ -53,7 +53,6 @@ export class Router {
   }
 
   async loadRoute(): Promise<void> {
-    console.log('loadRoute triggered, path:', window.location.pathname);
     const path = window.location.pathname || '/';
     const outlet = document.getElementById(this.outletId);
     if (!outlet) {

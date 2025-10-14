@@ -38,6 +38,7 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
         const data = request.body;
         const { username, password } = data;
 
+        console.log("MF " + username + ", " + password + " is trying to create an account");
         if (!username || !password) {
             return reply.status(400).send({ success: false, error: 'username_or_password_empty' });
         }
@@ -78,7 +79,7 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
             const token_jwt = fastify.jwt.sign(jwt_content);
             return reply.setCookie('token', token_jwt, {
                     httpOnly: true,
-                    secure : true,
+                    secure : false, // true if HTTPS
                     sameSite : 'none',
                     path : '/'
             }).send({success: true});
@@ -96,19 +97,20 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
         
         if (!username || !password)
         {
-                return reply.status(400).send({success:false, error : 'username_or_password_empty'});
+            return reply.status(400).send({success:false, error : 'username_or_password_empty'});
         }
 
         let user;
         try {
             user = await db.get("SELECT * FROM users WHERE username = ?", [username]);
+            if (!user)
+            {
+                return reply.status(401).send({success:false, error : 'username_not_exist'});
+            }
         } catch (err){
             return reply.status(500).send({success: false, error : 'db_access'});                          
         }
-        if (!user)
-        {
-            return reply.status(401).send({success:false, error : 'username_not_exist'});
-        }
+  
         const passwordIsValid = await bcrypt.compare(password, user.password);
         if (!passwordIsValid)
         {
@@ -148,7 +150,7 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
                 const token_jwt = fastify.jwt.sign(jwt_content);
                 return reply.setCookie('token', token_jwt, {
                         httpOnly: true,
-                        secure : true,
+                        secure : false, // true for HTTPS
                         sameSite : 'none',
                         path : '/'
                 }).send({success: true});
@@ -161,10 +163,7 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
     // Permet d'activer le 2FA sur le compte et renvoie le qr code (ainsi que la clé secrete). Nécessite d'être connecté
     fastify.get('/api/2fa/setup', {preValidation: [fastify.authenticate]}, async (request, reply) => {
       try {
-          // Génère le secret_key pour le 2FA (totp)
-          // await request.jwtVerify();
-          // console.log("id = " + request.user.id);
-
+          // create secret_key pour le 2FA (totp)
           const secret = speakeasy.generateSecret({name : "Pong game"});
           const secret_key = secret.base32;
 
@@ -282,12 +281,22 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
 
 
     // renvoie mon pseudo (cookie test)
-    fastify.get('/api/test_my_profile', {preValidation: [fastify.authenticate]}, async (request, reply) => {
+    fastify.get('/api/me', {preValidation: [fastify.authenticate]}, async (request, reply) => {
             await fastify.updateLastOnline(request.user.id);
-            return ({username:request.user.username});
+            return reply.send({ success: true, username: request.user.username });
     });
 
-
+    // get all users
+    fastify.get('/api/users', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+        try {
+            const users = await db.all("SELECT id, username, avatar_url FROM users");
+            return reply.send({ success: true, users });
+        } catch (err) 
+        {
+            fastify.log.error(err);
+            return reply.status(500).send({ success: false, error: 'db_error' });
+        }
+    });
 
     // Retourne toutes les infos d'un profile a partir de son username ou ID
     fastify.get('/api/profile/:identifier', { preValidation: [fastify.authenticate] }, async (request, reply) => {

@@ -2,6 +2,7 @@ import HomePage from './pages/home';
 import { Router } from '../router';
 import VitePage from './pages/vitepage';
 import NTFoundPage from './pages/404';
+import AuthPage from './pages/auth';
 
 export class App {
   private router = new Router('app');
@@ -11,9 +12,8 @@ export class App {
   }
 
   private async check_authentication(): Promise<boolean>{
-    return true;
     try {
-        const res = await fetch('/api/me', { credentials: 'include' });
+        const res = await fetch('http://localhost:3010/api/me', { credentials: 'include' });
         const data = await res.json();
         if (data && data.success)
           {
@@ -27,17 +27,22 @@ export class App {
 
   private setupRoutes(): void {
     this.router.addRoute('/', async () => {
-       return this.renderPage(HomePage, 'main-page');
+        /*const auth = await this.check_authentication();
+        if (auth) {*/
+            return this.renderPage(HomePage, 'main-page');
+        /*} else {
+            this.router.navigate('/auth');
+        }*/
     });
 
-    // this.router.addRoute('/login', async () => {
-    //   const auth = await this.ensureAuthenticated();
-    //   if (auth.success) {
-    //     this.router.navigate('/dashboard');
-    //   } else {
-    //     await this.renderPage(LoginPage, 'login-page', false);
-    //   }
-    // });
+    this.router.addRoute('/auth', async () => {
+      /* const auth = await this.check_authentication();
+      if (auth) {
+        this.router.navigate('/');
+      } else {*/
+        return this.renderPage(AuthPage, 'auth-page');
+      //}
+    });
 
     // this.router.addRoute('/play', () => {
     //   return this.renderPage(PlayPage, 'play-page', false);
@@ -53,6 +58,8 @@ export class App {
     });
     
     this.router.loadRoute();
+
+
   }
 
 
@@ -63,12 +70,13 @@ export class App {
     {
         // auth for each rendered page
         const isAuthenticated = await this.check_authentication();
-        if (!isAuthenticated && !(id == 'login-page' || id == 'register-page'))
+        if (!isAuthenticated && !(id == 'login-page' || id == 'auth-page'))
         {
-            this.router.navigate('/home');
+            this.router.navigate('/auth');
             return;
         }
-        console.log("rendering " + id );
+        
+        // console.log("rendering " + id );
 
         // complete DOM clear before every rendering
         const app = document.getElementById('app')!;
