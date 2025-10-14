@@ -12,11 +12,12 @@ services:
       - /app/node_modules     # Avoid overwriting node_modules
 
   backend:
-    build: ./src/back-end
+    build:
+      context: ./src/back-end
+      dockerfile: Dockerfile
     ports:
-      - '3000:3000'
-    volumes:
-      - sqlite-data:/app/data  # Persist the SQLite DB
+      - "3010:3010"
+    restart: unless-stopped
 
 volumes:
   sqlite-data:

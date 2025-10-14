@@ -15,5 +15,5 @@ RUN npm install
 COPY . .
 
 # Expose port and start
-EXPOSE 3000
+EXPOSE 3010
 CMD ["npm", "start"]

@@ -1,27 +1,33 @@
-all : up
+# Makefile
 
-up :
-	docker compose -f docker-compose.yml up --build -d
+# Default target
+.PHONY: all up build re fclean logs
 
+all: up
 
-# start both services
-up:
-	docker-compose up -d
+# Build without cache and start the containers
+build:
+	docker compose build --no-cache
 
-# stop and clear all containers
+# Start the containers (after build)
+up: build
+	docker compose up -d
+
+# Rebuild and restart everything fresh
+re:
+	docker compose down -v
+	docker image prune -f
+	docker compose build --no-cache
+	docker compose up -d
+
+# Stop and clean everything
 fclean:
-	docker-compose stop
-	docker-compose down -v
+	docker compose down -v
 	docker image prune -f
 	rm -rf src/front-end/node_modules
 	rm -rf src/back-end/node_modules src/back-end/package-lock.json
 	npm cache clean --force
 
-# Rebuild and start everything (fresh)
-re:
-	docker-compose down -v
-	docker image prune -f
-	docker-compose up --build -d
-
-# notes
-# -d = detached mode (runs in background)
+# View backend logs
+logs:
+	docker compose logs -f backend

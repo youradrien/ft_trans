@@ -14,43 +14,6 @@ const CLIENT_ID = process.env.GOOGLE_CLIENT_ID; // A mettre dans un fichier .env
 const client = new OAuth2Client(CLIENT_ID); 
 
 
-
-// Crée la table dans la bdd si elle n'existe pas
-(async () => {
-        // Attention : la clé secrete pour le TOTP aura 255 caractères max
-        await db.run(`CREATE TABLE IF NOT EXISTS friends (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, friend_id INTEGER NOT NULL)`);
-        await db.run(`CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username varchar (255) DEFAULT NULL, password varchar (255) DEFAULT NULL, avatar_url varchar (255) DEFAULT NULL, email varchar (255) DEFAULT NULL, role varchar (50) DEFAULT 'user', xp INTEGER DEFAULT 0, level INTEGER DEFAULT 0, elo INTEGER DEFAULT 1200, created_at DATETIME DEFAULT (datetime('now')), last_online DATETIME DEFAULT (datetime('now')))`);
-        await db.run(`CREATE TABLE IF NOT EXISTS blocked_users (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, blocked_user_id INTEGER NOT NULL, created_at DATETIME DEFAULT (datetime('now')))`);
-})();
-
-// Add created_at column to users table if it doesn't exist and update existing rows
-(async () => {
-    try {
-        const columns = await db.all(`PRAGMA table_info(users)`);
-        const hasCreatedAt = columns.some(col => col.name === 'created_at');
-        if (!hasCreatedAt) {
-            await db.run(`ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT NULL`);
-            await db.run(`UPDATE users SET created_at = '2025-06-07' WHERE created_at IS NULL`);
-        }
-    } catch (err) {
-        console.error("Error checking or adding 'created_at' column:", err);
-    }
-})();
-
-// Add status column to friends table if it doesn't exist
-(async () => {
-    try {
-        const columns = await db.all(`PRAGMA table_info(friends)`);
-        const hasStatus = columns.some(col => col.name === 'status');
-        if (!hasStatus) {
-            await db.run(`ALTER TABLE friends ADD COLUMN status TEXT DEFAULT 'pending'`);
-        }
-    } catch (err) {
-        console.error("Error checking or adding 'status' column:", err);
-    }
-})();
-
-
 async function getJWTContent(user_id)
 {
     let user;
@@ -66,278 +29,261 @@ async function getJWTContent(user_id)
 
 async function userRoutes(fastify, options) // Options permet de passer des variables personnalisées
 {
-    // Pour tests uniquement
     fastify.get('/api/test', async (request, reply) => {
             return "test akbar";
     });
 
-    // Route inscription
+    // REGISTER
     fastify.post('/api/register', async (request, reply) => {
-            const data = request.body;
-            const { username, password } = data;
+        const data = request.body;
+        const { username, password } = data;
 
-            if (!username || !password) {
-                return reply.status(400).send({ success: false, error: 'username_or_password_empty' });
+        if (!username || !password) {
+            return reply.status(400).send({ success: false, error: 'username_or_password_empty' });
+        }
+
+        try {
+            const user_exists = await db.get("SELECT * FROM users WHERE username = ?", [username]);
+            if (user_exists) {
+                return reply.status(409).send({ success: false, error: 'username_already_exist' });
             }
+        } catch (err) {
+            return reply.status(500).send({ success: false, error: 'db_access' });
+        }
 
-            try {
-                const user_exists = await db.get("SELECT * FROM users WHERE username = ?", [username]);
-                if (user_exists) {
-                    return reply.status(409).send({ success: false, error: 'username_already_exist' });
-                }
-            } catch (err) {
-                return reply.status(500).send({ success: false, error: 'db_access' });
-            }
+        const hashed_password = await bcrypt.hash(password, 10);
+        try {
+            await db.run(
+                "INSERT INTO users (username, password, created_at, last_online, level) VALUES (?, ?, datetime('now'), datetime('now'), 0)",
+                [username, hashed_password]
+            );
+        } catch (err) {
+            return reply.status(500).send({ success: false, error: 'db_access' });
+        }
 
-            const hashed_password = await bcrypt.hash(password, 10);
-            try {
-                await db.run(
-                    "INSERT INTO users (username, password, created_at, last_online, level) VALUES (?, ?, datetime('now'), datetime('now'), 0)",
-                    [username, hashed_password]
-                );
-            } catch (err) {
-                return reply.status(500).send({ success: false, error: 'db_access' });
-            }
-
-            // Obtient le nouvel user ajouté a la base de données
-            let user_added_id;
-            try {
-                    const user_added = await db.get("SELECT * FROM users WHERE username = ?", [username])
-                    user_added_id = user_added.id;
-            } catch (err)
-            {
-                    return reply.status(500).send({success: false, error : 'db_access'});                          
-            }
+        // get unique id from user in db
+        let user_added_id;
+        try {
+            const user_added = await db.get("SELECT * FROM users WHERE username = ?", [username])
+            user_added_id = user_added.id;
+        } catch (err)
+        {
+            return reply.status(500).send({success: false, error : 'db_access'});                          
+        }
 
 
-            // Génère un nouveau JWT
-            try {
-                    const jwt_content = await getJWTContent(user_added_id);
-                    const token_jwt = fastify.jwt.sign(jwt_content);
-                    // return ({success : true, token_jwt});
-                    return reply.setCookie('token', token_jwt, {
-                            httpOnly: true,
-                            secure : true,
-                            sameSite : 'none',
-                            path : '/'
-                    }).send({success: true});
-            } catch (err)
-            {
-                    return ({success : false, error : "db_access"});
-            }
-
+        // Génère un nouveau JWT
+        try {
+            const jwt_content = await getJWTContent(user_added_id);
+            const token_jwt = fastify.jwt.sign(jwt_content);
+            return reply.setCookie('token', token_jwt, {
+                    httpOnly: true,
+                    secure : true,
+                    sameSite : 'none',
+                    path : '/'
+            }).send({success: true});
+        } catch (err)
+        {
+            return ({success : false, error : "db_access"});
+        }
     });
 
 
 
-    // Route connexion
+    // LOGIN
     fastify.post('/api/login', async (request, reply) => {
+        const {username, password, code_totp } = request.body;
+        
+        if (!username || !password)
+        {
+                return reply.status(400).send({success:false, error : 'username_or_password_empty'});
+        }
 
-            const {username, password, code_totp } = request.body;
-            
-            if (!username || !password)
-            {
-                    return reply.status(400).send({success:false, error : 'username_or_password_empty'});
-            }
+        let user;
+        try {
+            user = await db.get("SELECT * FROM users WHERE username = ?", [username]);
+        } catch (err){
+            return reply.status(500).send({success: false, error : 'db_access'});                          
+        }
+        if (!user)
+        {
+            return reply.status(401).send({success:false, error : 'username_not_exist'});
+        }
+        const passwordIsValid = await bcrypt.compare(password, user.password);
+        if (!passwordIsValid)
+        {
+            return reply.status(401).send({success:false, error : 'password_not_valid'});
+        }
 
-            let user;
-            try {
-                    user = await db.get("SELECT * FROM users WHERE username = ?", [username]);
-            } catch (err){
-                    return reply.status(500).send({success: false, error : 'db_access'});                          
-            }
-            if (!user)
-            {
-                    return reply.status(401).send({success:false, error : 'username_not_exist'});
-            }
-            const passwordIsValid = await bcrypt.compare(password, user.password);
-            if (!passwordIsValid)
-            {
-                    return reply.status(401).send({success:false, error : 'password_not_valid'});
-            }
+        // A faire : vérifier le code 2FA généré par Google Authenticator envoyé dans le body
+        if (user.secret_totp)
+        {
+          if (!code_totp)
+          {
+              // Envoyer erreur : le code totp envoyé dans le formulaire est vide
+              return reply.status(401).send({success: false, error : '2fa_empty'});                   
+          }
+          else
+          {
+              // On verifie si le code envoyé est correct
+              const verified = speakeasy.totp.verify({
+                      secret:user.secret_totp,
+                      encoding: 'base32',
+                      token: code_totp,
+                      window: 1
+              });
+              if (!verified)
+              {
+                      return reply.status(401).send({success: false, error : '2fa_code_not_valid'});
+              }
+          }
+        }
 
-            // A faire : vérifier le code 2FA généré par Google Authenticator envoyé dans le body
-            if (user.secret_totp)
-            {
-                    if (!code_totp)
-                    {
-                            // Envoyer erreur : le code totp envoyé dans le formulaire est vide
-                            return reply.status(401).send({success: false, error : '2fa_empty'});                   
-                    }
-                    else
-                    {
-                            // On verifie si le code envoyé est correct
-                            const verified = speakeasy.totp.verify({
-                                    secret:user.secret_totp,
-                                    encoding: 'base32',
-                                    token: code_totp,
-                                    window: 1
-                            });
-                            if (!verified)
-                            {
-                                    return reply.status(401).send({success: false, error : '2fa_code_not_valid'});
-                            }
-                    }
-            }
+        // Update last_online after successful login
+        await fastify.updateLastOnline(user.id);
 
-            // Update last_online after successful login
-            await fastify.updateLastOnline(user.id);
-
-            // Génère un nouveau JWT
-            try {
-                    const jwt_content = await getJWTContent(user.id);
-                    const token_jwt = fastify.jwt.sign(jwt_content);
-                    // return ({success : true, token_jwt});
-                    return reply.setCookie('token', token_jwt, {
-                            httpOnly: true,
-                            secure : true,
-                            sameSite : 'none',
-                            path : '/'
-                    }).send({success: true});
-            } catch (err)
-            {
-                    return ({success : false, error : "db_access"});
-            }
+        // Génère un nouveau JWT
+        try {
+                const jwt_content = await getJWTContent(user.id);
+                const token_jwt = fastify.jwt.sign(jwt_content);
+                return reply.setCookie('token', token_jwt, {
+                        httpOnly: true,
+                        secure : true,
+                        sameSite : 'none',
+                        path : '/'
+                }).send({success: true});
+        } catch (err)
+        {
+                return ({success : false, error : "db_access"});
+        }
     });
 
     // Permet d'activer le 2FA sur le compte et renvoie le qr code (ainsi que la clé secrete). Nécessite d'être connecté
     fastify.get('/api/2fa/setup', {preValidation: [fastify.authenticate]}, async (request, reply) => {
-            try {
-                    // Génère le secret_key pour le 2FA (totp)
-                    // await request.jwtVerify();
-                    // console.log("id = " + request.user.id);
+      try {
+          // Génère le secret_key pour le 2FA (totp)
+          // await request.jwtVerify();
+          // console.log("id = " + request.user.id);
 
-                    const secret = speakeasy.generateSecret({name : "Pong game"});
-                    const secret_key = secret.base32;
+          const secret = speakeasy.generateSecret({name : "Pong game"});
+          const secret_key = secret.base32;
 
-                    // Met a jour le secret key dans le base de données
-                    const sql_request = "UPDATE users SET secret_totp = ? WHERE id = ?";
-                    await db.run(sql_request, [secret_key, request.user.id]);
+          // Met a jour le secret key dans le base de données
+          const sql_request = "UPDATE users SET secret_totp = ? WHERE id = ?";
+          await db.run(sql_request, [secret_key, request.user.id]);
 
-                    // Envoie un QR code et la clé
-                    const qr_image = await qrcode.toDataURL(secret.otpauth_url);
-                    return ({success:true, qr_image, secret_key});
-            } catch (err)
-            {
-                    return ({success:false, error:"db_access"});
-            }
+          // Envoie un QR code et la clé
+          const qr_image = await qrcode.toDataURL(secret.otpauth_url);
+          return ({success:true, qr_image, secret_key});
+      } catch (err)
+      {
+          return ({success:false, error:"db_access"});
+      }
     });
 
 
 
-
-
-    // Route API pour Google Sign In (appelée via fetch) !!!! NE FONCTIONNE QU'AVEC LE NAVIGATEUR
+    // API -- Google Sign In (appelée via fetch) !!!! NE FONCTIONNE QU'AVEC LE NAVIGATEUR
     fastify.post('/api/auth/google', async (request, reply) => {
-            const { id_token } = request.body;
+        const { id_token } = request.body;
 
-            try {
-                    console.log("TEST GOOGLE");
-                    const ticket = await client.verifyIdToken({
-                            idToken: id_token,
-                            audience: CLIENT_ID // Vérifie que le JWT obtenu grace a google est bien destiné A MON programme
-                    });
-
-                    const payload = ticket.getPayload();
-
-                    if (!payload)
-                    {       
-                            fastify.log.info("erreur sign in payload");
-                            return reply.status(401).send({success:false, error : "invalid_token"});
-                    }
-                    else
-                    {
-                            console.log("Google sign in reussi");
-
-                            // Vérifie si l'utilisateur existe deja dans la BDD et renvoie le JWT
-                            let user;
-                            try {
-                                    user = await db.get("SELECT * FROM users WHERE sub_google = ?", [payload.sub]);
-                            } catch (err){
-                                    return reply.status(500).send({success: false, error : 'db_access'});                          
-                            }
-                            if (!user)
-                            {
-
-                                    // Premiere connexion avec Google SignIn
-
-                                    // Génère un pseudo aléatoire
-                                    const number = Math.floor(Math.random() * 10000000);
-                                    const pseudo_new = `Player${number}`;
-
-                                    // Insert un nouvel utilisateur dans la BDD avec le pseudo aléatoire
-                                    try {
-                                            await db.run("INSERT INTO users (username, sub_google) VALUES (?, ?)", [pseudo_new, payload.sub]);
-                                    } catch (err)
-                                    {
-                                            return reply.status(500).send({success: false, error : 'db_access'});
-                                    }
-
-                                    // Je récupère son ID
-                                    let real_user;
-                                    try {
-                                            real_user = await db.get("SELECT * FROM users WHERE sub_google = ?", [payload.sub]);
-                                    } catch (err){
-                                            return reply.status(500).send({success: false, error : 'db_access'});                          
-                                    }
-
-                                    // Génère un nouveau JWT
-                                    try {
-                                            const jwt_content = await getJWTContent(real_user.id);
-                                            const token_jwt = fastify.jwt.sign(jwt_content);
-                                            // return ({success : true, first_connection:true ,token_jwt});
-
-
-                                            ///// A TESTER !!!!!!
-                                            return reply.setCookie('token', token_jwt, {
-                                                    httpOnly: true,
-                                                    secure : true,
-                                                    sameSite : 'none',
-                                                    path : '/'
-                                            }).send({success: true});
-
-                                    } catch (err)
-                                    {
-                                            return ({success : false, error : "db_access"});
-                                    }
-                            }
-                            else
-                            {
-                                    // L'utilisateur a déja une ligne associée dans la base de données
-
-                                    // Génère un nouveau JWT
-                                    try {
-                                            const jwt_content = await getJWTContent(user.id);
-                                            const token_jwt = fastify.jwt.sign(jwt_content);
-                                            // return ({success : true, first_connection:false ,token_jwt});
-                                            
-                                            ///// A TESTER !!!!!!
-                                            return reply.setCookie('token', token_jwt, {
-                                                    httpOnly: true,
-                                                    secure : true,
-                                                    sameSite : 'none',
-                                                    path : '/'
-                                            }).send({success: true});
-
-                                    } catch (err)
-                                    {
-                                            return ({success : false, error : "db_access"});
-                                    }
-                            }
-                    }
-            } catch(err)
-            {
-                    console.log("probleme avec google sign in catch");
-                    return reply.status(500).send({success: false, error : 'unknown_error'});
+        try {
+            console.log("TEST GOOGLE");
+            const ticket = await client.verifyIdToken({
+                    idToken: id_token,
+                    audience: CLIENT_ID // Vérifie que le JWT obtenu grace a google est bien destiné A MON programme
+            });
+            const payload = ticket.getPayload();
+            if (!payload)
+            {       
+                fastify.log.info("erreur sign in payload");
+                return reply.status(401).send({success:false, error : "invalid_token"});
             }
+            else
+            {
+                console.log("Google sign in reussi");
+
+                // Vérifie si l'utilisateur existe deja dans la BDD et renvoie le JWT
+                let user;
+                try {
+                        user = await db.get("SELECT * FROM users WHERE sub_google = ?", [payload.sub]);
+                } catch (err){
+                        return reply.status(500).send({success: false, error : 'db_access'});                          
+                }
+                if (!user)
+                {
+                    // Premiere connexion avec Google SignIn
+                    // Génère un pseudo aléatoire
+                    const number = Math.floor(Math.random() * 10000000);
+                    const pseudo_new = `Player${number}`;
+
+                    // Insert un nouvel utilisateur dans la BDD avec le pseudo aléatoire
+                    try {
+                            await db.run("INSERT INTO users (username, sub_google) VALUES (?, ?)", [pseudo_new, payload.sub]);
+                    } catch (err)
+                    {
+                            return reply.status(500).send({success: false, error : 'db_access'});
+                    }
+
+                    // Je récupère son ID
+                    let real_user;
+                    try {
+                            real_user = await db.get("SELECT * FROM users WHERE sub_google = ?", [payload.sub]);
+                    } catch (err){
+                            return reply.status(500).send({success: false, error : 'db_access'});                          
+                    }
+
+                    // Génère un nouveau JWT
+                    try {
+                            const jwt_content = await getJWTContent(real_user.id);
+                            const token_jwt = fastify.jwt.sign(jwt_content);
+
+                            ///// A TESTER !!!!!!
+                            return reply.setCookie('token', token_jwt, {
+                                    httpOnly: true,
+                                    secure : true,
+                                    sameSite : 'none',
+                                    path : '/'
+                            }).send({success: true});
+
+                    } catch (err)
+                    {
+                            return ({success : false, error : "db_access"});
+                    }
+                }
+                else
+                {
+                    // L'utilisateur a déja une ligne associée dans la base de données
+                    // Génère un nouveau JWT
+                    try {
+                          const jwt_content = await getJWTContent(user.id);
+                          const token_jwt = fastify.jwt.sign(jwt_content);
+                          // return ({success : true, first_connection:false ,token_jwt});
+                          
+                          ///// A TESTER !!!!!!
+                          return reply.setCookie('token', token_jwt, {
+                                  httpOnly: true,
+                                  secure : true,
+                                  sameSite : 'none',
+                                  path : '/'
+                          }).send({success: true});
+                    } catch (err)
+                    {
+                          return ({success : false, error : "db_access"});
+                    }
+                }
+            }
+        } catch(err)
+        {
+            console.log("probleme avec google sign in catch");
+            return reply.status(500).send({success: false, error : 'unknown_error'});
+        }
     } );
 
 
-    // Test du cookie : renvoie mon pseudo
+    // renvoie mon pseudo (cookie test)
     fastify.get('/api/test_my_profile', {preValidation: [fastify.authenticate]}, async (request, reply) => {
-            // Update last_online for authenticated user
             await fastify.updateLastOnline(request.user.id);
-
             return ({username:request.user.username});
     });
 
@@ -345,84 +291,83 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
 
     // Retourne toutes les infos d'un profile a partir de son username ou ID
     fastify.get('/api/profile/:identifier', { preValidation: [fastify.authenticate] }, async (request, reply) => {
-          const identifier = request.params.identifier;
+        const identifier = request.params.identifier;
 
-          let user;
-          try {
-                  if (isNaN(identifier)) {
-                          // Fetch by username
-                          user = await db.get("SELECT * FROM users WHERE username = ?", [identifier]);
-                  } else {
-                          // Fetch by ID
-                          user = await db.get("SELECT * FROM users WHERE id = ?", [identifier]);
-                  }
-          } catch (err) {
-                  return reply.status(500).send({ success: false, error: 'db_access' });
-          }
-
-          if (!user) {
-                  return reply.status(404).send({ success: false, error: "user_not_found" });
-          }
-
-          const isMyProfile = request.user.id === user.id;
-          const isOnline = (new Date().getTime() - new Date(user.last_online).getTime()) < 60000; // 60 seconds
-
-          // Vérification en base : est-ce que request.user.id a bloqué user.id ?
-          let blockRow;
-          try {
-              blockRow = await db.get(
-                  "SELECT 1 FROM blocked_users WHERE user_id = ? AND blocked_user_id = ?",
-                  [request.user.id, user.id]
-              );
-          } catch (err) {
-              return reply.status(500).send({ success: false, error: 'db_access' });
-          }
-          const i_blocked = !!blockRow;
-
-          // Ajouter le statut d'amitié
-          let friend_status = 'none';
-          if (!isMyProfile) {
-              try {
-                  // Vérifier si j'ai envoyé une demande d'ami
-                  const sentRequest = await db.get(
-                      "SELECT status FROM friends WHERE user_id = ? AND friend_id = ?",
-                      [request.user.id, user.id]
-                  );
-                  
-                  // Vérifier si j'ai reçu une demande d'ami
-                  const receivedRequest = await db.get(
-                      "SELECT status FROM friends WHERE user_id = ? AND friend_id = ?",
-                      [user.id, request.user.id]
-                  );
-
-                  if (sentRequest?.status === 'accepted' || receivedRequest?.status === 'accepted') {
-                      friend_status = 'friends';
-                  } else if (sentRequest?.status === 'pending') {
-                      friend_status = 'request_sent'; // Correction ici
-                  } else if (receivedRequest?.status === 'pending') {
-                      friend_status = 'request_received'; // Demande reçue en attente
-                  }
-              } catch (err) {
-                  console.error('Error checking friendship status:', err);
+        let user;
+        try {
+              if (isNaN(identifier)) { // Fetch by username
+                      user = await db.get("SELECT * FROM users WHERE username = ?", [identifier]);
+              } else { // Fetch by ID
+                      user = await db.get("SELECT * FROM users WHERE id = ?", [identifier]);
               }
-          }
-          return reply.send({
-              success: true,
-              id: user.id,
-              username: user.username,
-              wins: user.wins,
-              losses: user.losses,
-              elo: user.elo,
-              xp: user.xp,
-              level: user.level,
-              avatar_url: user.avatar_url || '/uploads/default.png',
-              last_online: user.last_online,
-              created_at: user.created_at,
-              isMyProfile,
-              is_online: isOnline,
-              i_blocked,    // <-- nouveau champ pour le front
-              friend_status // <-- nouveau champ pour le statut d'amitié
-          });
+        } catch (err) {
+                return reply.status(500).send({ success: false, error: 'db_access' });
+        }
+
+        if (!user) {
+                return reply.status(404).send({ success: false, error: "user_not_found" });
+        }
+
+        const isMyProfile = request.user.id === user.id;
+        const isOnline = (new Date().getTime() - new Date(user.last_online).getTime()) < 60000; // 60 seconds
+
+        // Vérification en base : est-ce que request.user.id a bloqué user.id ?
+        let blockRow;
+        try {
+            blockRow = await db.get(
+                "SELECT 1 FROM blocked_users WHERE user_id = ? AND blocked_user_id = ?",
+                [request.user.id, user.id]
+            );
+        } catch (err) {
+            return reply.status(500).send({ success: false, error: 'db_access' });
+        }
+        const i_blocked = !!blockRow;
+
+        // Ajouter le statut d'amitié
+        let friend_status = 'none';
+        if (!isMyProfile) 
+        {
+            try {
+                // verifier si j'ai envoyé une demande d'ami
+                const sentRequest = await db.get(
+                    "SELECT status FROM friends WHERE user_id = ? AND friend_id = ?",
+                    [request.user.id, user.id]
+                );
+                
+                // Vérifier si j'ai reçu une demande d'ami
+                const receivedRequest = await db.get(
+                    "SELECT status FROM friends WHERE user_id = ? AND friend_id = ?",
+                    [user.id, request.user.id]
+                );
+
+                if (sentRequest?.status === 'accepted' || receivedRequest?.status === 'accepted') {
+                    friend_status = 'friends';
+                } else if (sentRequest?.status === 'pending') {
+                    friend_status = 'request_sent'; // Correction ici
+                } else if (receivedRequest?.status === 'pending') {
+                    friend_status = 'request_received'; // Demande reçue en attente
+                }
+            } catch (err) {
+                console.error('Error checking friendship status:', err);
+            }
+        }
+        return reply.send({
+            success: true,
+            id: user.id,
+            username: user.username,
+            wins: user.wins,
+            losses: user.losses,
+            elo: user.elo,
+            xp: user.xp,
+            level: user.level,
+            avatar_url: user.avatar_url || '/uploads/default.png',
+            last_online: user.last_online,
+            created_at: user.created_at,
+            isMyProfile,
+            is_online: isOnline,
+            i_blocked,    // <-- nouveau champ pour le front
+            friend_status // <-- nouveau champ pour le statut d'amitié
+        });
     });
   }
   module.exports = userRoutes;
