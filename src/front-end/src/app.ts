@@ -1,6 +1,6 @@
 import HomePage from './pages/home';
 import { Router } from '../router';
-import VitePage from './pages/vitepage';
+import Play from './pages/play';
 import NTFoundPage from './pages/404';
 import AuthPage from './pages/auth';
 
@@ -27,30 +27,22 @@ export class App {
 
   private setupRoutes(): void {
     this.router.addRoute('/', async () => {
-        /*const auth = await this.check_authentication();
-        if (auth) {*/
-            return this.renderPage(HomePage, 'main-page');
-        /*} else {
-            this.router.navigate('/auth');
-        }*/
+    
+          return this.renderPage(HomePage, 'main-page');
+   
     });
 
     this.router.addRoute('/auth', async () => {
-      /* const auth = await this.check_authentication();
-      if (auth) {
-        this.router.navigate('/');
-      } else {*/
         return this.renderPage(AuthPage, 'auth-page');
-      //}
     });
 
+    this.router.addRoute('/play', async () => {
+        return this.renderPage(Play, 'play-page');
+    });
     // this.router.addRoute('/play', () => {
     //   return this.renderPage(PlayPage, 'play-page', false);
     // });
 
-    this.router.addRoute('/vite-demo', async () => {
-      return this.renderPage(VitePage, 'vite-demo-page');
-    });
 
     // 🧱 catch-all fallback for unknown routes
     this.router.addRoute('*', async () => {
@@ -76,18 +68,12 @@ export class App {
             return;
         }
         
-        // console.log("rendering " + id );
 
         // complete DOM clear before every rendering
         const app = document.getElementById('app')!;
         while (app.firstChild) {
             app.removeChild(app.firstChild);
         }
-
-        // header for every page
-        // const headerContainer = document.createElement('div');
-        // headerContainer.innerHTML = createHeader();
-        // app.appendChild(headerContainer.firstElementChild as HTMLElement);
 
         const page = new PageClass(id, {
           navigate: (route: string) => this.router.navigate(route)

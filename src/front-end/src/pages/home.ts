@@ -1,28 +1,22 @@
-// src/main/index.ts (main page of trans)
 import Page from '../template/page.ts';
+import Header from './header.ts';
 
 export default class MainPage extends Page {
-  async render(): Promise<HTMLElement> 
-  {
+  async render(): Promise<HTMLElement> {
     const container = document.createElement('div');
     container.id = this.id;
-    container.innerHTML = `
-      <h1>Transcendance</h1>
-      <h2>Home</h2>
-      <button id="playBtn">Play</button>
-      <button id="leaderboardBtn">Leaderboard</button>
-      <button id="friendsBtn">Friends</button>
-    `;
 
-    container.querySelector('#playBtn')?.addEventListener('click', () => {
-      this.router.navigate('/play');
-    });
-    container.querySelector('#leaderboardBtn')?.addEventListener('click', () => {
-      this.router.navigate('/leaderboard');
-    });
-    container.querySelector('#friendsBtn')?.addEventListener('click', () => {
-      this.router.navigate('/friends');
-    });
+    // Add header if authenticated
+    if (true === true /* isAuthenticated && this.id !== 'auth-page' */) {
+      const header = new Header('header', this.router);
+      const headerElement = await header.render();
+      container.appendChild(headerElement);
+    }
+
+    // Create a separate div for page content
+    const content = document.createElement('div');
+    content.innerHTML = `<button>brrr</button>`;
+    container.appendChild(content);
 
     return container;
   }

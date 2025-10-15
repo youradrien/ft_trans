@@ -23,7 +23,7 @@ fastify.decorate("closedWsUsersSet", new Set());
 
 // register CORS (our frontend)
 fastify.register(cors, {
-  origin: 'http://127.0.0.1:5173', // ✅ must match EXACTLY
+  origin: 'http://localhost:5173', // ✅ must match EXACTLY
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
