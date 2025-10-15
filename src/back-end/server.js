@@ -40,6 +40,25 @@ fastify.register(jwt, {
         }
 });
 
+
+fastify.decorate('setAuthCookie', function setAuthCookie(reply, token) {
+  /**
+   * Flag indicating whether we're running in prod or dev mode
+   * so we can hopefully fix CORS / cookie issues
+   * @constant {boolean} isProd - true if NODE_ENV is set to 'production', false otherwise
+   * @constant {number} maxAge - 7 days in seconds
+   */
+  const isProd = process.env.NODE_ENV === 'production';
+  reply.setCookie('token', token, {
+    httpOnly: true,
+    sameSite: isProd ? 'none' : 'lax',
+    secure: isProd,
+    path: '/',
+    maxAge: 60 * 60 * 24 * 7,
+  });
+  return reply;
+});
+
 // register routes
 fastify.register(require('./routes/users.js'));
 // fastify.register(require('./routes/matchmaking.js'));
