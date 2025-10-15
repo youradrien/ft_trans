@@ -77,15 +77,10 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
         try {
             const jwt_content = await getJWTContent(user_added_id);
             const token_jwt = fastify.jwt.sign(jwt_content);
-            return reply.setCookie('token', token_jwt, {
-                    httpOnly: true,
-                    secure : false, // true if HTTPS
-                    sameSite : 'none',
-                    path : '/'
-            }).send({success: true});
-        } catch (err)
-        {
-            return ({success : false, error : "db_access"});
+            fastify.setAuthCookie(reply, token_jwt);
+            return reply.send({ success: true });
+        } catch (err) {
+            return ({ success: false, error: "db_access" });
         }
     });
 
@@ -148,15 +143,10 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
         try {
                 const jwt_content = await getJWTContent(user.id);
                 const token_jwt = fastify.jwt.sign(jwt_content);
-                return reply.setCookie('token', token_jwt, {
-                        httpOnly: true,
-                        secure : false, // true for HTTPS
-                        sameSite : 'none',
-                        path : '/'
-                }).send({success: true});
-        } catch (err)
-        {
-                return ({success : false, error : "db_access"});
+                fastify.setAuthCookie(reply, token_jwt);
+                return reply.send({ success: true });
+        } catch (err) {
+                return ({ success: false, error: "db_access" });
         }
     });
 
@@ -236,15 +226,8 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
                     try {
                             const jwt_content = await getJWTContent(real_user.id);
                             const token_jwt = fastify.jwt.sign(jwt_content);
-
-                            ///// A TESTER !!!!!!
-                            return reply.setCookie('token', token_jwt, {
-                                    httpOnly: true,
-                                    secure : true,
-                                    sameSite : 'none',
-                                    path : '/'
-                            }).send({success: true});
-
+                            fastify.setAuthCookie(reply, token_jwt);
+                            return reply.send({ success: true });
                     } catch (err)
                     {
                             return ({success : false, error : "db_access"});
@@ -257,15 +240,8 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
                     try {
                           const jwt_content = await getJWTContent(user.id);
                           const token_jwt = fastify.jwt.sign(jwt_content);
-                          // return ({success : true, first_connection:false ,token_jwt});
-                          
-                          ///// A TESTER !!!!!!
-                          return reply.setCookie('token', token_jwt, {
-                                  httpOnly: true,
-                                  secure : true,
-                                  sameSite : 'none',
-                                  path : '/'
-                          }).send({success: true});
+                          fastify.setAuthCookie(reply, token_jwt);
+                          return reply.send({ success: true });
                     } catch (err)
                     {
                           return ({success : false, error : "db_access"});
