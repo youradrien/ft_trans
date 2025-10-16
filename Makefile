@@ -13,6 +13,9 @@ build:
 up: build
 	docker compose up -d
 
+dev:
+	docker compose -f docker-compose.dev.yml up -d
+
 # Rebuild and restart everything fresh
 re:
 	docker compose down -v
