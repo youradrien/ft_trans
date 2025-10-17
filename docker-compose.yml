@@ -1,23 +1,48 @@
-version: '3.8'
-
 services:
+  modsec-proxy:
+    image: owasp/modsecurity-crs:3.3.7-nginx-alpine-202510030310
+    container_name: modsecurity
+    ports:
+      - "5173:80"
+    environment:
+      - PARANOIA=1
+      - ANOMALY_INBOUND=10
+      - ANOMALY_OUTBOUND=5
+      - BLOCKING_PARANOIA=2
+      - LOGLEVEL=debug
+    volumes:
+      - ./nginx-custom.conf:/etc/nginx/conf.d/reverse-proxy.conf:ro
+    depends_on:
+      - frontend
+    networks:
+      - transcendance_net
+
   frontend:
     build: ./src/front-end
-    ports:
-      - '5173:80'  # Or '3000:3000' if using a dev server
+    expose:
+      - "80"   # exposé pour le réseau interne, plus de port mappé sur l’hôte
+      - "8080" # pour le live reload interne si nécessaire
     depends_on:
       - backend
     volumes:
-      - ./src/front-end:/app  # <-- watch for changes
-      - /app/node_modules     # Avoid overwriting node_modules
+      - ./src/front-end:/app
+      - /app/node_modules
+    networks:
+      - transcendance_net
 
   backend:
     build:
       context: ./src/back-end
       dockerfile: Dockerfile
-    ports:
-      - "3010:3010"
+    expose:
+      - "3010"
     restart: unless-stopped
+    networks:
+      - transcendance_net
 
 volumes:
   sqlite-data:
+
+networks:
+  transcendance_net:
+    driver: bridge
