@@ -57,7 +57,7 @@ export default class Header extends Page {
       this.router.navigate('/friends');
     });
     container.querySelector('#profileBtn')?.addEventListener('click', () => {
-      this.router.navigate('/profile');
+      this.router.navigate('/me');
     });
 
     return container;

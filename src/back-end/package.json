@@ -16,6 +16,7 @@
     "@fastify/jwt": "^6.4.0",
     "@fastify/multipart": "^7.7.3",
     "@fastify/websocket": "^8.0.0",
+    "@fastify/static": "^7.0.4",
     "bcrypt": "^6.0.0",
     "cookie": "^1.0.2",
     "cookies": "^0.9.1",

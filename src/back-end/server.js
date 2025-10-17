@@ -1,4 +1,5 @@
 // imports
+const path = require('path');
 const cookie = require('@fastify/cookie');
 const jwt = require('@fastify/jwt');
 const cors = require('@fastify/cors');
@@ -63,6 +64,12 @@ fastify.decorate('setAuthCookie', function setAuthCookie(reply, token) {
 fastify.register(require('./routes/users.js'));
 // fastify.register(require('./routes/matchmaking.js'));
 
+
+// Serve uploaded files
+fastify.register(require('@fastify/static'), {
+  root: path.join(__dirname, 'uploads'),
+  prefix: '/uploads/',
+});
 
 // START SERV
 const start = async () => {

@@ -13,6 +13,8 @@ const { OAuth2Client } = require('google-auth-library');
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID; // A mettre dans un fichier .env !!!!
 const client = new OAuth2Client(CLIENT_ID); 
 
+const DEFAULT_AVATAR_URL = "https://dummyimage.com/72x72/262626/ffffff&text=42";
+
 
 async function getJWTContent(user_id)
 {
@@ -256,10 +258,62 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
     } );
 
 
-    // renvoie mon pseudo (cookie test)
-    fastify.get('/api/me', {preValidation: [fastify.authenticate]}, async (request, reply) => {
+    // Return my full profile (decoded from JWT cookie)
+    fastify.get('/api/me', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+        try {
+            // Ensure last_online is updated
             await fastify.updateLastOnline(request.user.id);
-            return reply.send({ success: true, username: request.user.username });
+            const user = await db.get(
+                "SELECT id, username, created_at, last_online, level, avatar_url FROM users WHERE id = ?",
+                [request.user.id]
+            );
+            if (!user) {
+                return reply.status(404).send({ success: false, error: 'user_not_found' });
+            }
+            return reply.send({
+                success: true,
+                id: user.id,
+                username: user.username,
+                created_at: user.created_at,
+                last_online: user.last_online,
+                level: user.level,
+                avatar_url: user.avatar_url || DEFAULT_AVATAR_URL
+            });
+        } catch (err) {
+            return reply.status(500).send({ success: false, error: 'db_access' });
+        }
+    });
+
+    fastify.post('/api/me/avatar', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+        try {
+            const data = await request.file();
+            if (!data)
+                throw { statusCode: 400, error: 'no_file' };
+
+            const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+            if (!allowedMimes.includes(data.mimetype))
+                throw { statusCode: 400, error: 'invalid_file_type' };
+
+            const uploadsDir = path.join(__dirname, '../uploads');
+            if (!fs.existsSync(uploadsDir))
+                fs.mkdirSync(uploadsDir, { recursive: true });
+
+            const ext = data.filename.split('.').pop() || 'jpg';
+            const filename = `${request.user.id}_${Date.now()}.${ext}`;
+            const filepath = path.join(uploadsDir, filename);
+
+            await pipeline(data.file, fs.createWriteStream(filepath));
+
+            const avatarUrl = `/uploads/${filename}`;
+            await db.run("UPDATE users SET avatar_url = ? WHERE id = ?", [avatarUrl, request.user.id]);
+
+            return reply.send({ success: true, avatar_url: avatarUrl });
+        } catch (err) {
+            const status = err.statusCode || 500;
+            const error = err.error || 'upload_failed';
+            fastify.log.error('Avatar upload error:', err);
+            return reply.status(status).send({ success: false, error });
+        }
     });
 
     // get all users
@@ -345,7 +399,7 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
             elo: user.elo,
             xp: user.xp,
             level: user.level,
-            avatar_url: user.avatar_url || '/uploads/default.png',
+            avatar_url: user.avatar_url || DEFAULT_AVATAR_URL,
             last_online: user.last_online,
             created_at: user.created_at,
             isMyProfile,

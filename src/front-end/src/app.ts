@@ -3,6 +3,7 @@ import { Router } from '../router';
 import Play from './pages/play';
 import NTFoundPage from './pages/404';
 import AuthPage from './pages/auth';
+import Profile from './pages/profile';
 
 export class App {
   private router = new Router('app');
@@ -39,13 +40,30 @@ export class App {
     this.router.addRoute('/play', async () => {
         return this.renderPage(Play, 'play-page');
     });
+    
+  // Own profile at /me
+  this.router.addRoute('/me', async () => {
+    return this.renderPage(Profile, 'profile-page');
+  });
     // this.router.addRoute('/play', () => {
     //   return this.renderPage(PlayPage, 'play-page', false);
     // });
 
 
     // 🧱 catch-all fallback for unknown routes
+    // Catch-all: support dynamic routes like /profile/:identifier, else 404
     this.router.addRoute('*', async () => {
+      const path = window.location.pathname || '/';
+      // dynamic /profile/:identifier (view others)
+      if (path.startsWith('/profile/')) {
+        const identifier = decodeURIComponent(path.slice('/profile/'.length));
+        return this.renderPage(Profile, 'profile-page', { identifier });
+      }
+      // Redirect old /profile to /me if accessed directly
+      if (path === '/profile') {
+        this.router.navigate('/me');
+        return;
+      }
       return this.renderPage(NTFoundPage, 'not-found-page');
     });
     
@@ -55,9 +73,12 @@ export class App {
   }
 
 
-  private async renderPage<T extends new (id: string, router: any) => { render: () => Promise<HTMLElement> }>(
+  private async renderPage<
+    T extends new (id: string, router: any, options?: any) => { render: () => Promise<HTMLElement> }
+  >(
         PageClass: T, // any <T>
         id: string,
+        options?: any,
     ): Promise<void> 
     {
         // auth for each rendered page
@@ -77,7 +98,7 @@ export class App {
 
         const page = new PageClass(id, {
           navigate: (route: string) => this.router.navigate(route)
-        });
+        }, options);
         const pageElement = await page.render();
         app.appendChild(pageElement);
     }
