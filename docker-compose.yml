@@ -15,8 +15,6 @@ services:
     build:
       context: ./src/back-end
       dockerfile: Dockerfile
-    environment:
-      - NODE_ENV=development   # 'production' en prod
     ports:
       - "3010:3010"
     restart: unless-stopped

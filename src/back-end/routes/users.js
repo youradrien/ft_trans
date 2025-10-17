@@ -33,16 +33,15 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
             return "test akbar";
     });
 
+
     // REGISTER
     fastify.post('/api/register', async (request, reply) => {
         const data = request.body;
         const { username, password } = data;
-
         console.log("MF " + username + ", " + password + " is trying to create an account");
         if (!username || !password) {
             return reply.status(400).send({ success: false, error: 'username_or_password_empty' });
         }
-
         try {
             const user_exists = await db.get("SELECT * FROM users WHERE username = ?", [username]);
             if (user_exists) {
@@ -51,7 +50,6 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
         } catch (err) {
             return reply.status(500).send({ success: false, error: 'db_access' });
         }
-
         const hashed_password = await bcrypt.hash(password, 10);
         try {
             await db.run(
@@ -61,8 +59,6 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
         } catch (err) {
             return reply.status(500).send({ success: false, error: 'db_access' });
         }
-
-        // get unique id from user in db
         let user_added_id;
         try {
             const user_added = await db.get("SELECT * FROM users WHERE username = ?", [username])
@@ -71,97 +67,95 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
         {
             return reply.status(500).send({success: false, error : 'db_access'});                          
         }
-
-
-        // Génère un nouveau JWT
+        // new jwt ahhh
         try {
             const jwt_content = await getJWTContent(user_added_id);
             const token_jwt = fastify.jwt.sign(jwt_content);
-            fastify.setAuthCookie(reply, token_jwt);
-            return reply.send({ success: true });
-        } catch (err) {
-            return ({ success: false, error: "db_access" });
+            return reply.setCookie('token', token_jwt, {
+                    httpOnly: true,
+                    secure : false, // true if HTTPS
+                    sameSite : 'none',
+                    path : '/'
+            }).send({success: true});
+        } catch (err)
+        {
+            return ({success : false, error : "db_access"});
         }
     });
 
 
+    
 
     // LOGIN
     fastify.post('/api/login', async (request, reply) => {
         const {username, password, code_totp } = request.body;
-        
-        if (!username || !password)
-        {
+        if (!username || !password){
             return reply.status(400).send({success:false, error : 'username_or_password_empty'});
         }
-
         let user;
         try {
             user = await db.get("SELECT * FROM users WHERE username = ?", [username]);
-            if (!user)
-            {
+            if (!user){
                 return reply.status(401).send({success:false, error : 'username_not_exist'});
             }
         } catch (err){
             return reply.status(500).send({success: false, error : 'db_access'});                          
         }
-  
         const passwordIsValid = await bcrypt.compare(password, user.password);
-        if (!passwordIsValid)
-        {
+        if (!passwordIsValid){
             return reply.status(401).send({success:false, error : 'password_not_valid'});
         }
-
-        // A faire : vérifier le code 2FA généré par Google Authenticator envoyé dans le body
         if (user.secret_totp)
         {
-          if (!code_totp)
-          {
-              // Envoyer erreur : le code totp envoyé dans le formulaire est vide
+          if (!code_totp){
               return reply.status(401).send({success: false, error : '2fa_empty'});                   
           }
-          else
-          {
-              // On verifie si le code envoyé est correct
+          else{
               const verified = speakeasy.totp.verify({
                       secret:user.secret_totp,
                       encoding: 'base32',
                       token: code_totp,
                       window: 1
               });
-              if (!verified)
-              {
-                      return reply.status(401).send({success: false, error : '2fa_code_not_valid'});
+              if (!verified){
+                return reply.status(401).send({success: false, error : '2fa_code_not_valid'});
               }
           }
         }
-
-        // Update last_online after successful login
         await fastify.updateLastOnline(user.id);
-
-        // Génère un nouveau JWT
         try {
-                const jwt_content = await getJWTContent(user.id);
-                const token_jwt = fastify.jwt.sign(jwt_content);
-                fastify.setAuthCookie(reply, token_jwt);
-                return reply.send({ success: true });
-        } catch (err) {
-                return ({ success: false, error: "db_access" });
+            const jwt_content = await getJWTContent(user.id);
+            const token_jwt = fastify.jwt.sign(jwt_content);
+            return reply.setCookie('token', token_jwt, {
+                    httpOnly: true,
+                    secure : false, // true for HTTPS
+                    sameSite : 'none',
+                    path : '/'
+            }).send({success: true});
+        } catch (err)
+        {
+            return ({success : false, error : "db_access"});
         }
     });
+
+
+    
+    // LOGOUT
+    fastify.post('/api/logout', {preValidation: [fastify.authenticate]}, async (request, reply) => {
+        reply.clearCookie('token');
+        return reply.send({ success: true });
+    });
+
+
+
 
     // Permet d'activer le 2FA sur le compte et renvoie le qr code (ainsi que la clé secrete). Nécessite d'être connecté
     fastify.get('/api/2fa/setup', {preValidation: [fastify.authenticate]}, async (request, reply) => {
       try {
-          // create secret_key pour le 2FA (totp)
           const secret = speakeasy.generateSecret({name : "Pong game"});
           const secret_key = secret.base32;
-
-          // Met a jour le secret key dans le base de données
           const sql_request = "UPDATE users SET secret_totp = ? WHERE id = ?";
           await db.run(sql_request, [secret_key, request.user.id]);
-
-          // Envoie un QR code et la clé
           const qr_image = await qrcode.toDataURL(secret.otpauth_url);
           return ({success:true, qr_image, secret_key});
       } catch (err)
@@ -190,9 +184,6 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
             }
             else
             {
-                console.log("Google sign in reussi");
-
-                // Vérifie si l'utilisateur existe deja dans la BDD et renvoie le JWT
                 let user;
                 try {
                         user = await db.get("SELECT * FROM users WHERE sub_google = ?", [payload.sub]);
@@ -201,47 +192,45 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
                 }
                 if (!user)
                 {
-                    // Premiere connexion avec Google SignIn
-                    // Génère un pseudo aléatoire
                     const number = Math.floor(Math.random() * 10000000);
                     const pseudo_new = `Player${number}`;
-
-                    // Insert un nouvel utilisateur dans la BDD avec le pseudo aléatoire
                     try {
-                            await db.run("INSERT INTO users (username, sub_google) VALUES (?, ?)", [pseudo_new, payload.sub]);
+                        await db.run("INSERT INTO users (username, sub_google) VALUES (?, ?)", [pseudo_new, payload.sub]);
                     } catch (err)
                     {
-                            return reply.status(500).send({success: false, error : 'db_access'});
+                        return reply.status(500).send({success: false, error : 'db_access'});
                     }
-
-                    // Je récupère son ID
                     let real_user;
                     try {
-                            real_user = await db.get("SELECT * FROM users WHERE sub_google = ?", [payload.sub]);
+                        real_user = await db.get("SELECT * FROM users WHERE sub_google = ?", [payload.sub]);
                     } catch (err){
-                            return reply.status(500).send({success: false, error : 'db_access'});                          
+                        return reply.status(500).send({success: false, error : 'db_access'});                          
                     }
-
-                    // Génère un nouveau JWT
                     try {
-                            const jwt_content = await getJWTContent(real_user.id);
-                            const token_jwt = fastify.jwt.sign(jwt_content);
-                            fastify.setAuthCookie(reply, token_jwt);
-                            return reply.send({ success: true });
+                        const jwt_content = await getJWTContent(real_user.id);
+                        const token_jwt = fastify.jwt.sign(jwt_content);
+                        return reply.setCookie('token', token_jwt, {
+                                httpOnly: true,
+                                secure : true,
+                                sameSite : 'none',
+                                path : '/'
+                        }).send({success: true});
                     } catch (err)
                     {
-                            return ({success : false, error : "db_access"});
+                        return ({success : false, error : "db_access"});
                     }
                 }
                 else
                 {
-                    // L'utilisateur a déja une ligne associée dans la base de données
-                    // Génère un nouveau JWT
                     try {
                           const jwt_content = await getJWTContent(user.id);
                           const token_jwt = fastify.jwt.sign(jwt_content);
-                          fastify.setAuthCookie(reply, token_jwt);
-                          return reply.send({ success: true });
+                          return reply.setCookie('token', token_jwt, {
+                                  httpOnly: true,
+                                  secure : true,
+                                  sameSite : 'none',
+                                  path : '/'
+                          }).send({success: true});
                     } catch (err)
                     {
                           return ({success : false, error : "db_access"});
@@ -256,16 +245,43 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
     } );
 
 
+
     // renvoie mon pseudo (cookie test)
     fastify.get('/api/me', {preValidation: [fastify.authenticate]}, async (request, reply) => {
             await fastify.updateLastOnline(request.user.id);
             return reply.send({ success: true, username: request.user.username });
     });
 
-    // get all users
-    fastify.get('/api/users', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+
+    // get ses propres infos
+    fastify.get('/api/me-info', { preValidation: [fastify.authenticate] }, async (request, reply) => {
         try {
-            const users = await db.all("SELECT id, username, avatar_url FROM users");
+            const u = request.user.username;
+
+            const user = await db.get(
+            "SELECT id, username, wins, last_online, created_at, losses FROM users WHERE username = ?",
+            [u]
+            );
+            console.log('JWT username:', `"${request.user.username}"`);
+            console.log(user);
+            console.log(u);
+            if (!user) {
+                return reply.status(404).send({ success: false, message: 'User not found' });
+            }
+            return reply.send({ success: true, user });
+        } catch (err) {
+            request.log.error(err);
+            return reply.status(500).send({ success: false, message: 'Internal server error' });
+        }
+    });
+
+
+
+    // get all users
+    fastify.get('/api/leaderboard', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+        console.log("GETTING LEADERBOARD");
+        try {
+            const users = await db.all("SELECT id, username, elo, avatar_url FROM users");
             return reply.send({ success: true, users });
         } catch (err) 
         {
@@ -274,29 +290,25 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
         }
     });
 
-    // Retourne toutes les infos d'un profile a partir de son username ou ID
+
+    // get user (from his :username)
     fastify.get('/api/profile/:identifier', { preValidation: [fastify.authenticate] }, async (request, reply) => {
         const identifier = request.params.identifier;
-
         let user;
         try {
-              if (isNaN(identifier)) { // Fetch by username
-                      user = await db.get("SELECT * FROM users WHERE username = ?", [identifier]);
-              } else { // Fetch by ID
-                      user = await db.get("SELECT * FROM users WHERE id = ?", [identifier]);
-              }
+            if (isNaN(identifier)) { // Fetch by username
+                    user = await db.get("SELECT * FROM users WHERE username = ?", [identifier]);
+            } else { // Fetch by ID
+                    user = await db.get("SELECT * FROM users WHERE id = ?", [identifier]);
+            }
         } catch (err) {
-                return reply.status(500).send({ success: false, error: 'db_access' });
+            return reply.status(500).send({ success: false, error: 'db_access' });
         }
-
         if (!user) {
-                return reply.status(404).send({ success: false, error: "user_not_found" });
+            return reply.status(404).send({ success: false, error: "user_not_found" });
         }
-
         const isMyProfile = request.user.id === user.id;
         const isOnline = (new Date().getTime() - new Date(user.last_online).getTime()) < 60000; // 60 seconds
-
-        // Vérification en base : est-ce que request.user.id a bloqué user.id ?
         let blockRow;
         try {
             blockRow = await db.get(
@@ -307,7 +319,6 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
             return reply.status(500).send({ success: false, error: 'db_access' });
         }
         const i_blocked = !!blockRow;
-
         // Ajouter le statut d'amitié
         let friend_status = 'none';
         if (!isMyProfile) 
@@ -318,7 +329,6 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
                     "SELECT status FROM friends WHERE user_id = ? AND friend_id = ?",
                     [request.user.id, user.id]
                 );
-                
                 // Vérifier si j'ai reçu une demande d'ami
                 const receivedRequest = await db.get(
                     "SELECT status FROM friends WHERE user_id = ? AND friend_id = ?",

@@ -3,6 +3,9 @@ import { Router } from '../router';
 import Play from './pages/play';
 import NTFoundPage from './pages/404';
 import AuthPage from './pages/auth';
+import Profile from './pages/profile';
+import Header from './pages/header';
+import Leaderboard from './pages/leaderboard';
 
 export class App {
   private router = new Router('app');
@@ -39,10 +42,21 @@ export class App {
     this.router.addRoute('/play', async () => {
         return this.renderPage(Play, 'play-page');
     });
-    // this.router.addRoute('/play', () => {
-    //   return this.renderPage(PlayPage, 'play-page', false);
-    // });
 
+    this.router.addRoute('/leaderboard', async () => {
+        return this.renderPage(Leaderboard, 'leaderboard-page');
+    });
+
+    this.router.addRoute('/profile', async () => {
+      const path = window.location.pathname;
+      console.log(path);
+      const match = path.match(/^\/profile\/([^/]+)$/);
+      if (!match) {
+        return this.renderPage(NTFoundPage, 'not-found-page');
+      }
+      // const username = match[1];
+      return this.renderPage(Profile, 'profile-page');
+    });
 
     // 🧱 catch-all fallback for unknown routes
     this.router.addRoute('*', async () => {
@@ -67,12 +81,25 @@ export class App {
             this.router.navigate('/auth');
             return;
         }
+        if(isAuthenticated && (id == 'auth-page'))
+        {
+            this.router.navigate('/');
+            return;
+        }
         
+
 
         // complete DOM clear before every rendering
         const app = document.getElementById('app')!;
         while (app.firstChild) {
             app.removeChild(app.firstChild);
+        }
+
+        // header
+        if(isAuthenticated){
+          const header = new Header('header', this.router);
+          const headerElement = await header.render();
+          app.appendChild(headerElement);
         }
 
         const page = new PageClass(id, {
