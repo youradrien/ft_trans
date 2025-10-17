@@ -28,10 +28,29 @@ async function _INIT_DB() {
       wins INTEGER DEFAULT 0,
       losses INTEGER DEFAULT 0,
       avatar_url TEXT DEFAULT NULL,
+      elo INTEGER DEFAULT 1000,            -- ✅ elo starts at 1000
       last_online DATETIME DEFAULT (datetime('now')),
       created_at DATETIME DEFAULT (datetime('now'))
     )
   `);
+
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS games (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        player1_id INTEGER NOT NULL,
+        player2_id INTEGER NOT NULL,
+        winner_id INTEGER NOT NULL,
+        player1_score INTEGER NOT NULL,
+        player2_score INTEGER NOT NULL,
+        replay_data TEXT DEFAULT NULL, -- (optional) for storing game states or positions
+        played_at DATETIME DEFAULT (datetime('now')),
+
+        FOREIGN KEY(player1_id) REFERENCES users(id),
+        FOREIGN KEY(player2_id) REFERENCES users(id),
+        FOREIGN KEY(winner_id) REFERENCES users(id)
+    )
+  `);
+
 
   // Add columns if missing (catch errors silently)
   await db.run(`ALTER TABLE users ADD COLUMN elo INTEGER DEFAULT 1000`).catch(() => {});

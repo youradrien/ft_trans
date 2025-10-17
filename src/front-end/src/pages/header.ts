@@ -1,37 +1,26 @@
 import Page from '../template/page.ts';
-
 export default class Header extends Page {
   async render(): Promise<HTMLElement> {
     const container = document.createElement('div');
     container.id = this.id;
-
-    // Add styles directly to container
     container.style.display = 'flex';
     container.style.flexDirection = 'column';
     container.style.alignItems = 'center';
-    container.style.padding = '20px';
-    // container.style.backgroundColor = '#f8f9fa';
-    container.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-    container.style.position = 'sticky';
-    container.style.top = '0';
+    container.style.padding = '15px';
+    container.style.backgroundColor = '#2b2b2bff';
+    container.style.boxShadow = '0 4px 8px rgba(24, 24, 24, 1)';
+    container.style.marginTop = '5px';
+    container.style.marginLeft = 'auto';
+    container.style.marginRight = 'auto';
+    container.style.fontFamily = '"Press Start 2P", cursive'; // pixel font
     container.style.zIndex = '1000';
+
 
     // Inject inner HTML
     container.innerHTML = `
-      <h1 style="
-        margin: 0;
-        font-size: 2.2rem;
-        font-weight: 700;
-        color: #333;
-        transition: color 0.3s ease;
-      ">Transcendance</h1>
+        <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 
-      <h2 style="
-        margin: 5px 0 15px 0;
-        font-size: 1.2rem;
-        font-weight: 400;
-        color: #666;
-      ">Home</h2>
+      <h1>Transcendance</h1>
 
       <div style="
         display: flex;
@@ -39,9 +28,11 @@ export default class Header extends Page {
         flex-wrap: wrap;
         justify-content: center;
       ">
-        <button id="playBtn" style="${buttonStyle}">Play</button>
-        <button id="leaderboardBtn" style="${buttonStyle}">Leaderboard</button>
-        <button id="friendsBtn" style="${buttonStyle}">Friends</button>
+        <button id="homeBtn" >Home</button>
+        <button id="playBtn" >Play</button>
+        <button id="leaderboardBtn" >Leaderboard</button>
+        <button id="friendsBtn">Friends</button>
+        <button id="logoutBtn" style="background-color: #f44336; color: white;">Logout</button>
       </div>
     `;
 
@@ -49,31 +40,52 @@ export default class Header extends Page {
     container.querySelector('#leaderboardBtn')?.addEventListener('click', () => {
       this.router.navigate('/leaderboard');
     });
+    container.querySelector('#homeBtn')?.addEventListener('click', () => {
+      this.router.navigate('/');
+    });
     container.querySelector('#playBtn')?.addEventListener('click', () => {
       this.router.navigate('/play');
     });
     container.querySelector('#friendsBtn')?.addEventListener('click', () => {
       this.router.navigate('/friends');
     });
-
+    container.querySelector('#logoutBtn')?.addEventListener('click', async () => {
+      try {
+        const res = await fetch('http://localhost:3010/api/logout', {
+          method: 'POST',
+          credentials: 'include',
+        });
+        if (res.ok) {
+          console.log('[+] Logged out successfully');
+          localStorage.clear();
+          this.router.navigate('/');
+        } else {
+          console.error('[-] Logout failed');
+        }
+      } catch (err) {
+        console.error('[-] Error during logout:', err);
+      }
+    });
+    const activeButtonStyle = `
+      background-color: #d0d0d0ff;
+      color: black;
+      font-weight: bold;
+    `;
+    const currentPath = window.location.pathname;
+    const routeButtonMap: Record<string, string> = {
+      '/': 'homeBtn',
+      '/play': 'playBtn',
+      '/leaderboard': 'leaderboardBtn',
+      '/friends': 'friendsBtn',
+    };
+    Object.entries(routeButtonMap).forEach(([route, buttonId]) => {
+      const button = container.querySelector(`#${buttonId}`) as HTMLButtonElement;
+      if (button &&  currentPath.startsWith(route)) {
+        if(currentPath == "/" && route != "/")
+          return;
+        button.style.cssText += activeButtonStyle;
+      }
+    });
     return container;
   }
 }
-
-// Reusable button styles
-const buttonStyle = `
-  padding: 10px 18px;
-  font-size: 1rem;
-  font-weight: 500;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background-color 0.3s ease, transform 0.2s ease;
-}
-button:hover {
-  background-color: #0056b3;
-  transform: translateY(-2px);
-}
-`;

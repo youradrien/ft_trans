@@ -6,18 +6,23 @@
 all: up
 
 # Build without cache and start the containers
-build:
+build: generate-secret
 	docker compose build --no-cache
 
 # Start the containers (after build)
 up: build
 	docker compose up -d
 
-dev:
-	docker compose -f docker-compose.dev.yml up -d
+# i use this to gen new .env var for JWT token at compile time, just to have to re-log 
+# and make previous users JWT-cookies invalid on api
+generate-secret:
+	@openssl rand -hex 32 > .jwt_secret && \
+	echo "JWT_SECRET=$$(cat .jwt_secret)" > ./src/back-end/.env
+	@cat ./src/back-end/.env
+	rm -f .jwt_secret
 
 # Rebuild and restart everything fresh
-re:
+re: generate-secret
 	docker compose down -v
 	docker image prune -f
 	docker compose build --no-cache

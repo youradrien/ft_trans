@@ -3,6 +3,7 @@ const cookie = require('@fastify/cookie');
 const jwt = require('@fastify/jwt');
 const cors = require('@fastify/cors');
 const multipart = require ('@fastify/multipart');
+const websocket = require('@fastify/websocket');
 const fastify = require('fastify')({   logger: {
     transport: {
       target: 'pino-pretty',
@@ -13,58 +14,41 @@ const fastify = require('fastify')({   logger: {
       }
     }
   } });
-const { _INIT_DB } = require('./db.js'); // chemin relatif selon ton projet
+const { db, _INIT_DB } = require('./db.js'); // chemin relatif selon ton projet
+
 
 // global containers, for rooms ws (accessibles depuis toutes les routes)
-fastify.decorate("roomsMap", new Map());
-fastify.decorate("matchsMap", new Map());
-fastify.decorate("closedWsUsersSet", new Set());
+fastify.decorate("p_rooms", new Map());   // game rooms -> [player1, player2]
+fastify.decorate("p_waitingPlayers", new Map());        // matchId -> game state
 
 
-// register CORS (our frontend)
+// CORS (our frontend)
 fastify.register(cors, {
   origin: 'http://localhost:5173', // ✅ must match EXACTLY
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 });
-
 // JWT
+require('dotenv').config();
+const jwtSecret = process.env.JWT_SECRET;
 fastify.register(cookie);
 fastify.register(multipart);
 fastify.register(jwt, {
-        secret: 'laclesecrete_a_mettre_dans_fichier_env', // !!!!! ENV !!!
+        secret: jwtSecret || 'laclesecrete_a_mettre_dans_fichier_env', // !!!!! ENV !!!
         cookie: {
           cookieName: "token",
           signed : false
         }
 });
-
-
-fastify.decorate('setAuthCookie', function setAuthCookie(reply, token) {
-  /**
-   * Flag indicating whether we're running in prod or dev mode
-   * so we can hopefully fix CORS / cookie issues
-   * @constant {boolean} isProd - true if NODE_ENV is set to 'production', false otherwise
-   * @constant {number} maxAge - 7 days in seconds
-   */
-  const isProd = process.env.NODE_ENV === 'production';
-  reply.setCookie('token', token, {
-    httpOnly: true,
-    sameSite: isProd ? 'none' : 'lax',
-    secure: isProd,
-    path: '/',
-    maxAge: 60 * 60 * 24 * 7,
-  });
-  return reply;
-});
-
-// register routes
+// websocket
+fastify.register(websocket);
+// routes (REST api, ws)
 fastify.register(require('./routes/users.js'));
-// fastify.register(require('./routes/matchmaking.js'));
+fastify.register(require('./routes/pong.js'));
 
 
-// START SERV
+// START SERV, and link db
 const start = async () => {
     try {
       await _INIT_DB(); // ✅ DB init here <------------
@@ -76,6 +60,9 @@ const start = async () => {
     }
 };
 start();
+// ! important cuhh
+fastify.decorate('db', (db));
+
 
 // last time seen (user field)
 fastify.decorate('updateLastOnline', async function(userId) {
@@ -100,8 +87,8 @@ fastify.decorate("authenticate", async function(request, reply)
         {
           return reply.code(401).send({success:false, error:"no_token_in_cookie"})
         }
-
         const decoded = await request.jwtVerify(token);
+        // console.log('Decoded JWT:', decoded);
         request.user = decoded;
         await fastify.updateLastOnline(decoded.id); // Update last_online here
     } catch (err)
@@ -111,8 +98,6 @@ fastify.decorate("authenticate", async function(request, reply)
 });
 
 
-
-
 // Route GET /api (pour tests uniquement)
 fastify.get('/api', async (request, reply) => {
   return {
@@ -120,3 +105,4 @@ fastify.get('/api', async (request, reply) => {
     message: 'pong de ses morts'
   };
 });
+

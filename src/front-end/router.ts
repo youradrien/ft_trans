@@ -10,10 +10,8 @@ export class Router {
       throw new Error(`Outlet with id "${this.outletId}" not found.`);
     }
 
-    // Handle back/forward browser buttons
+    // back/forward browser buttons
     window.addEventListener('popstate', () => this.loadRoute());
-
-    // Initial load
     window.addEventListener('DOMContentLoaded', () => this.loadRoute());
 
     // Delegated click handler for links

@@ -20,6 +20,7 @@
     "cookie": "^1.0.2",
     "cookies": "^0.9.1",
     "diagnostics_channel": "^1.1.0",
+    "dotenv": "^17.2.3",
     "fastify": "^4.29.1",
     "google-auth-library": "^9.15.1",
     "nodemon": "^3.1.10",
