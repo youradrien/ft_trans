@@ -42,7 +42,6 @@ export default class Header extends Page {
         <button id="playBtn" style="${buttonStyle}">Play</button>
         <button id="leaderboardBtn" style="${buttonStyle}">Leaderboard</button>
         <button id="friendsBtn" style="${buttonStyle}">Friends</button>
-        <button id="profileBtn" style="${buttonStyle}">Profile</button>
       </div>
     `;
 
@@ -55,9 +54,6 @@ export default class Header extends Page {
     });
     container.querySelector('#friendsBtn')?.addEventListener('click', () => {
       this.router.navigate('/friends');
-    });
-    container.querySelector('#profileBtn')?.addEventListener('click', () => {
-      this.router.navigate('/profile');
     });
 
     return container;
