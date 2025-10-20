@@ -13,6 +13,12 @@ build:
 up: build
 	docker compose up -d
 
+down:
+	docker compose down
+
+stop:
+	docker compose stop
+
 # Rebuild and restart everything fresh
 re:
 	docker compose down -v
@@ -31,3 +37,13 @@ fclean:
 # View backend logs
 logs:
 	docker compose logs -f backend
+
+clean:
+	@docker stop $$(docker ps -qa) || true
+	@docker rm $$(docker ps -qa) || true
+	@docker rmi -f $$(docker images -qa) || true
+	@docker volume rm $$(docker volume ls -q) || true
+	@docker network rm $$(docker network ls -q) || true
+
+prune: clean
+	docker system prune -a --volumes -f

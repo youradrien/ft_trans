@@ -1,22 +1,4 @@
 services:
-  modsec-proxy:
-    image: owasp/modsecurity-crs:3.3.7-nginx-alpine-202510030310
-    container_name: modsecurity
-    ports:
-      - "5173:80"
-    environment:
-      - PARANOIA=1
-      - ANOMALY_INBOUND=10
-      - ANOMALY_OUTBOUND=5
-      - BLOCKING_PARANOIA=2
-      - LOGLEVEL=debug
-    volumes:
-      - ./nginx-custom.conf:/etc/nginx/conf.d/reverse-proxy.conf:ro
-    depends_on:
-      - frontend
-    networks:
-      - transcendance_net
-
   frontend:
     build: ./src/front-end
     expose:
@@ -40,9 +22,60 @@ services:
     networks:
       - transcendance_net
 
+
+#CYBERSECURITY SERVICE WITH MODSECURITY AND VAULT
+  modsec-proxy:
+    image: owasp/modsecurity-crs:3.3.7-nginx-alpine-202510030310
+    container_name: modsecurity
+    ports:
+      - "5173:80"
+    environment:
+      - PARANOIA=1
+      - ANOMALY_INBOUND=10
+      - ANOMALY_OUTBOUND=5
+      - BLOCKING_PARANOIA=2
+      - LOGLEVEL=debug
+    volumes:
+      - ./nginx-custom.conf:/etc/nginx/conf.d/reverse-proxy.conf:ro
+    depends_on:
+      - frontend
+    networks:
+      - transcendance_net
+
+  vault_dev:
+    image: hashicorp/vault:latest
+    container_name: vault-dev
+    command: vault server -dev -dev-root-token-id=root
+    ports:
+      - "8200:8200"   # accessible depuis ton navigateur
+    environment:
+      - VAULT_ADDR=http://127.0.0.1:8200
+    volumes:
+      - ./vault-data-dev:/vault/file
+    networks:
+      - transcendance_net
+
+  # vault_prod :
+  #   image: vault:latest
+  #   container_name: vault-prod
+  #   command: vault server -config=/vault/config/config.hcl
+  #   expose:
+  #     - "8200"        # interne uniquement
+  #   volumes:
+  #     - ./vault/config:/vault/config
+  #     - ./vault/data:/vault/file
+  #   environment:
+  #     - VAULT_ADDR=https://vault:8200
+  #   networks:
+  #     - internal_net
+  #   restart: always
+
 volumes:
   sqlite-data:
 
 networks:
   transcendance_net:
     driver: bridge
+  # internal_net:
+  #   driver: bridge
+  #   internal: true
