@@ -7,7 +7,7 @@ const qrcode = require('qrcode');
 const path = require('path');
 const fs = require('fs');
 const { pipeline } = require ('stream/promises');
-const { db } = require('../db.js'); // chemin relatif selon ton projet
+const { db } = require('../db.js'); // chemin relatif
 
 const { OAuth2Client } = require('google-auth-library');
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID; // A mettre dans un fichier .env !!!!
@@ -286,6 +286,23 @@ async function userRoutes(fastify, options) // Options permet de passer des vari
         } catch (err) 
         {
             fastify.log.error(err);
+            return reply.status(500).send({ success: false, error: 'db_error' });
+        }
+    });
+
+
+    // online count
+    fastify.get('/api/users/online', { preValidation: [fastify.authenticate] }, async (request, reply) => {
+        try {
+            const l_ago = (60) * 5; // (secondez) * minutes [5 minutes]
+            const row = await db.get(`
+                SELECT COUNT(*) as onlineCount FROM users
+                WHERE strftime('%s','now') - strftime('%s', last_online) < ${l_ago}
+            `);
+
+            return reply.send({ success: true, data: { online_players: row.onlineCount } });
+        } catch (err) {
+            request.log.error(err);
             return reply.status(500).send({ success: false, error: 'db_error' });
         }
     });

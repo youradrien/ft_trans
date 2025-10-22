@@ -13,15 +13,14 @@ export default class LeaderboardPage extends Page {
 
   async FETCH_PLAYERS(): Promise<Player[]> {
     try {
-      const response = await fetch('http://localhost:3010/api/leaderboard', {
+      const R = await fetch('http://localhost:3010/api/leaderboard', {
         credentials: 'include'
       });
-      if (!response.ok)
-        throw new Error(`API error: ${response.status} + ${response.json()}`);
-
-      const data = await response.json();
-      console.log(data);
-      return data?.users; // Adjust this depending on how your API sends data
+      if (!R.ok)
+        throw new Error(`API error: ${R.status} + ${R.json()}`);
+      const _data = await R.json();
+      // console.log(_data);
+      return _data?.users; // Adjust this depending on how your API sends data
     } catch (error) {
       console.error('Failed to fetch leaderboard:', error);
       return [];
@@ -29,7 +28,7 @@ export default class LeaderboardPage extends Page {
   }
 
   async render(): Promise<HTMLElement> {
-    const players = await this.FETCH_PLAYERS();
+    const _playerz = await this.FETCH_PLAYERS();
     const container = document.createElement('div');
     container.id = this.id;
     Object.assign(container.style, {
@@ -53,12 +52,12 @@ export default class LeaderboardPage extends Page {
         gap: 16px;
         cursor: crosshair;
       ">
-        ${players.length === 0 ? '<div>No players found.</div>' : ''}
+        ${_playerz.length === 0 ? '<div>No players found.</div>' : ''}
       </div>
     `;
 
     const list = container.querySelector('#leaderboard') as HTMLElement;
-    const sortedPlayers = [...players].sort((a, b) => b.elo - a.elo);
+    const sortedPlayers = [..._playerz].sort((a, b) => b.elo - a.elo);
     sortedPlayers.forEach((player, index) => {
       const card = document.createElement('div');
       card.style.display = 'flex';

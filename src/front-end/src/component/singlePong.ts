@@ -8,7 +8,7 @@ export default class SinglePong extends Page {
     const scoreContainer = document.createElement('div');
     scoreContainer.style.display = 'flex';
     scoreContainer.style.justifyContent = 'space-between';
-    scoreContainer.style.width = '900px';
+    scoreContainer.style.width = '800px';
     scoreContainer.style.marginBottom = '1rem';
     scoreContainer.style.fontSize = '2rem';
 
