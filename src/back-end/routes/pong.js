@@ -18,6 +18,39 @@ async function pong_routes(fastify, options)
         } });
     });
 
+    // specific PONG ROOMS
+    fastify.get('/api/pong/active-games', {preValidation: [fastify.authenticate]}, async (request, reply) => {
+        const USER__ID = request.user.id;
+        if(!USER__ID){
+            return reply.status(401).send({ success: false, error: 'aunthorizsed' });
+        }
+        const rooms = [];
+        for (const [id, game] of fastify.p_rooms.entries()) {
+            // p1-p2 usernames from DB -> one query
+            const players = await fastify.db.all(
+                'SELECT id, username FROM users WHERE id IN (?, ?)',
+                [game.players[0], game.players[1]]
+            );
+            // quick lookup
+            const user_map = new Map(players.map(user => [user.id, user.username]));
+            rooms.push({id,
+            player1: {
+                id: game.players[0],
+                username: user_map.get(game.players[0]) || 'Unknown',
+                score: game.scores.p1
+            },
+            player2: {
+                id: game.players[1],
+                username: user_map.get(game.players[1]) || 'Unknown',
+                score: game.scores.p2
+            }
+            });
+        }
+        return reply.status(200).send({ success: true, data:
+                rooms
+        });
+    });
+
 
     // PONG MATCHMAKING
     fastify.get('/api/pong/ws', { websocket: true }, async (connection, req) => {
@@ -50,16 +83,18 @@ async function pong_routes(fastify, options)
             connection.socket.send(JSON.stringify({ type: 'error', message: 'already in queue' }));
             connection.socket.close();
             return ;
-            // return reply.send({ success: false, message: 'already in queue' });
         }
          // add user to waiting queue
         p_waitingPlayers.set(USER_ID, connection.socket);
 
+        console.log(`INFO: ${fastify.p_waitingPlayers.size} are in waiting queue...`);
 
         // 2 players -> create new game
         const waitingEntries = [...p_waitingPlayers.entries()];
-        if (p_waitingPlayers.length >= 2)
+        if (p_waitingPlayers.size >= 2)
         {
+            // for now selecting 1st and 2nd in  queue
+            // TODO: potential matchmaking w player ELO (call asyncly DB here to fetch data)
             const [p1Id, p1Socket] = waitingEntries[0];
             const [p2Id, p2Socket] = waitingEntries[1];
 
@@ -77,11 +112,19 @@ async function pong_routes(fastify, options)
             };
             p_rooms.set(game_id, game);
 
-            // notify users w their ws
-            p1Socket.send(JSON.stringify({ type: 'start', role: 'p1', game_id }));
-            p2Socket.send(JSON.stringify({ type: 'start', role: 'p2', game_id }));
+            // [creating....]
+            p1Socket.send(JSON.stringify({ type: 'creating', role: 'p1', 
+                queueLength: p_waitingPlayers.size, roomsLength: p_rooms.size }));
+            p2Socket.send(JSON.stringify({ type: 'creating', role: 'p2',
+                queueLength: p_waitingPlayers.size, roomsLength: p_rooms.size }));
 
-            startGameLoop(game);
+            setTimeout(() => {
+                // [start...]
+                p1Socket.send(JSON.stringify({ type: 'start', role: 'p1', game_id }));
+                p2Socket.send(JSON.stringify({ type: 'start', role: 'p2', game_id }));
+
+                startGameLoop(game);
+            }, 10000);
         }else{
             connection.socket.send(JSON.stringify({
                 type: 'waiting',
@@ -95,7 +138,8 @@ async function pong_routes(fastify, options)
                 socket.send(JSON.stringify({
                     type: 'waiting-update',
                     message: 'Queue updated',
-                    queueLength: p_waitingPlayers.size
+                    queueLength: p_waitingPlayers.size,
+                    roomsLength: p_rooms.size
                 }));
             }
         }
@@ -117,11 +161,10 @@ async function pong_routes(fastify, options)
 
         connection.socket.on('close', () => {
             console.log('Player disconnected');
-            // cleanup from queue
+            // cleanup  waiting-queue
             if (p_waitingPlayers.has(USER_ID)) {
                 p_waitingPlayers.delete(USER_ID);
             }
-            // TODO: Handle disconnection, cleanup, etc.
         });
     });
 }
@@ -129,36 +172,36 @@ module.exports = pong_routes;
 
 function startGameLoop(game){
   const interval = setInterval(() => {
-        // Simple ball physics
+        // ball physics
         game.ball.x += game.ball.vx;
         game.ball.y += game.ball.vy;
 
-        // Bounce off top/bottom
+        // bounce top/bottom
         if (game.ball.y <= 0 || game.ball.y >= 200) {
-        game.ball.vy *= -1;
+            game.ball.vy *= -1;
         }
 
-        // Bounce or score
+        // bounce or score
         if (game.ball.x <= 0) {
-        game.scores.p2++;
-        resetBall(game);
+            game.scores.p2++;
+            resetBall(game);
         } else if (game.ball.x >= 300) {
-        game.scores.p1++;
-        resetBall(game);
+            game.scores.p1++;
+            resetBall(game);
         }
 
         // Broadcast game state to both players
         const payload = JSON.stringify({
-        type: 'state',
-        ball: game.ball,
-        paddles: game.paddles,
-        scores: game.scores
+            type: 'state',
+            ball: game.ball,
+            paddles: game.paddles,
+            scores: game.scores
         });
 
         game.players.forEach(socket => {
-        if (socket.readyState === 1) { // WebSocket.OPEN
-            socket.send(payload);
-        }
+            if (socket.readyState === 1) { // WebSocket.OPEN
+                socket.send(payload);
+            }
         });
   }, 1000 / 60); // 60 FPS
 
