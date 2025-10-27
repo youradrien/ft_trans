@@ -1,5 +1,5 @@
 import Page from '../template/page.ts';
-import SinglePong from '../component/singlePong.ts';
+import Pong from '../component/pong.ts';
 
 export default class PlayPage extends Page {
   async render(): Promise<HTMLElement> {
@@ -16,14 +16,14 @@ export default class PlayPage extends Page {
       ">
         <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 
-        <h1>🎮 Play Pong</h1>
-        <p style="margin-bottom: 0.2rem;" id="player-status">Looking for players...</p>
-        <p style="margin-bottom: 0.2rem;" id="rooms-status">Looking for any rooms?...</p>
+        <h1 style="margin-bottom: 1rem; font-size: 32px;">Pong 🎮</h1>
+        <p style="margin-bottom: 0.2rem;  font-size: 14px;" id="player-status">Looking for players...</p>
+        <p style="margin-bottom: 0.2rem;  font-size: 14px;" id="rooms-status">Looking for any rooms?...</p>
         <div id="active-games" style="margin-top: 3rem;
             min-width: 500px; 
             background-color: rgba(35, 35, 35, 0.5);
         ">
-          <h2 style="margin-bottom: 1rem;">🏓 Active Games</h2>
+          <h2 style="margin-bottom: 1rem; font-size: 32px;">🏓 Active Games</h2>
           <div id="game-list" style="display: flex; flex-direction: column; gap: 1rem;"></div>
         </div>
 
@@ -48,43 +48,16 @@ export default class PlayPage extends Page {
             ">0</span>
           </div>
         </div>
+
+        <h1 id="game-join-h1" style="margin-bottom: 1rem; font-size: 30px;">JOINING ' '</h1>
+        <h2 id="game-counter" style="margin-bottom: 1rem; font-size: 22px;">. . . . .</h2>
       </div>
     `;
     const p_st = container.querySelector('#player-status') as HTMLParagraphElement;
     const r_st = container.querySelector('#rooms-status') as HTMLParagraphElement;
     const q_btn = container.querySelector('#multiBtn') as HTMLButtonElement;
-
-    // stats of current serv state
-    // so : players in queue, rooms, total online plyr count
-    try {
-        const res = await fetch('http://localhost:3010/api/pong/status', {
-          credentials: 'include'
-        });
-        const data = await res.json();
-        const qc = container.querySelector('#queue-count') as HTMLSpanElement;
-        const online = data?.data?.queuedPlayers ?? 0;
-        if(data?.data?.joinedQueue)
-        {
-            q_btn.style.backgroundColor = '#00cc44';  // Green background
-            q_btn.style.color = 'white';              // White text
-            q_btn.innerText = '✅ Queued!';
-        }
-        r_st.innerText = `🔵 ${data?.data?.activeRooms} currently active pong room(s)...`;
-        p_st.innerText = `🟢 ${online} player(s) in queue`;
-        qc.innerText = String(online);
-    } catch (err) {
-        const p_st = container.querySelector('#player-status') as HTMLParagraphElement;
-        p_st.innerText = '⚠️ Could not load player status';
-    }
-
-    // single player btn handler
-    const s = container.querySelector('#singleBtn') as HTMLButtonElement;
-    s.onclick = async () => {
-      const sp = new SinglePong('single-player', this.router);
-      const ss = await sp.render();
-      container.innerHTML = '';
-      container.appendChild(ss);
-    };
+    const gCounter = container.querySelector('#game-counter') as HTMLButtonElement;
+    const gJntitle = container.querySelector('#game-join-h1') as HTMLButtonElement;
 
     // whole func dedicated to update active games data
     const fetch_games = async () => {
@@ -93,9 +66,9 @@ export default class PlayPage extends Page {
           credentials: 'include'
         });
         const data = await res.json();
-        console.log(data);
         if (data.success) {
           const _gl = container.querySelector('#game-list') as HTMLDivElement;
+          _gl.innerHTML = ''; // clear previous games
 
           data.data.forEach((game: any) => {
                 const _game_bx = document.createElement('div');
@@ -135,7 +108,6 @@ export default class PlayPage extends Page {
         console.error('Failed to fetch active games:', err);
       }
     }
-
     // (queue) btn handler
     q_btn.onclick = async () => {
       try {
@@ -146,25 +118,40 @@ export default class PlayPage extends Page {
             // console.log(data);
             const qc = container.querySelector('#queue-count') as HTMLSpanElement;
             const queueBtn = container.querySelector('#multiBtn') as HTMLButtonElement;
-
             if(data?.queueLength >= 0){
               qc.innerText = String(data?.queueLength);
               p_st.innerText = `🟢 ${data?.queueLength} player(s) in queue`;
             }
             if(data?.type == "waiting")
             {
-                queueBtn.style.backgroundColor = '#00cc44';  // Green background
-                queueBtn.style.color = 'white';              // White text
+                queueBtn.style.backgroundColor = '#00cc44';
+                queueBtn.style.color = 'white';            
                 queueBtn.innerText = '✅ Queued!';
             }
             if(data?.type == "creating")
             {
-                queueBtn.style.backgroundColor = '#1383e4ff';  // Green background
-                queueBtn.style.color = 'white';              // White text
+                queueBtn.style.backgroundColor = '#1383e4ff'; 
+                queueBtn.style.color = 'white';            
                 queueBtn.innerText = '🔵 creating game...';
                 r_st.innerText = `🔵 ${data?.roomsLength} currently active pong room(s)...`;
                 qc.innerText = '';
-                await fetch_games();  
+                await fetch_games();
+                // countdown.. either /actual game-countdown/ or /5s warmup time/
+                let _time_l = data?.countdown_v;
+                if(data?.is_a_comeback){
+                    gJntitle.innerHTML = "JOINING BACK YOUR GAME!";
+                }else{
+                    gJntitle.innerHTML = "STARTING....";
+                }
+                for(let i = 0; i < (_time_l); i++){
+                    const t_left = _time_l - i;
+                    setTimeout(() => {
+                      gCounter.innerText = (!data?.is_a_comeback) ?
+                        `⚔️ GAME-Joined! ⚔️  ${t_left}sec before start${(t_left % 2 == 0) ? '...'  : '..'}`
+                        :
+                        `WELCOME-BACK 🔄 ${t_left}sec (prepare urself bro)`;
+                    }, i * 1000);
+                }
             }
             if(data?.type == "waiting-update")
             {
@@ -176,10 +163,70 @@ export default class PlayPage extends Page {
             {
               alert(data.message);
             }
+            if(data?.type == "start")
+            {
+              console.log(data);
+              // Dynamically import or use your SinglePong component
+              const pongPage = new SinglePong();
+
+              // Render it and append to some container
+              const pongContainer = await pongPage.render();
+
+              // For example, append to a div with id "gameArea"
+              const gameArea = document.querySelector('#gameArea');
+              if (gameArea) {
+                  // Clear previous content if needed
+                  gameArea.innerHTML = '';
+                  gameArea.appendChild(pongContainer);
+              }
+            }
         };
       } catch (err) {
       }
     };
+
+    // stats of current serv state
+    // so : players in queue, rooms, total online plyr count
+    try {
+        await fetch_games();
+        gCounter.innerHTML = "";
+        gJntitle.innerHTML = "";
+        const res = await fetch('http://localhost:3010/api/pong/status', {
+          credentials: 'include'
+        });
+        const data = await res.json();
+        const qc = container.querySelector('#queue-count') as HTMLSpanElement;
+        const online = data?.data?.queuedPlayers ?? 0;
+        if(data?.data?.joinedQueue)
+        {
+            q_btn.style.backgroundColor = '#00cc44';  // Green background
+            q_btn.style.color = 'white';              // White text
+            q_btn.innerText = '✅ Queued!';
+        }
+        r_st.innerText = `🔵 ${data?.data?.activeRooms} currently active pong room(s)...`;
+        p_st.innerText = `🟢 ${online} player(s) in queue`;
+        qc.innerText = String(online);
+        if(data?.data?.alr_in_game){
+            // auto click the queue-up btn
+            // console.log("manually jnin back");
+            q_btn.click(); // <- this will trigger everythn needed by itself cuh
+        }
+    } catch (err) {
+        const p_st = container.querySelector('#player-status') as HTMLParagraphElement;
+        p_st.innerText = '⚠️ Could not load player status';
+    }
+
+    // single player btn handler
+    const s = container.querySelector('#singleBtn') as HTMLButtonElement;
+    s.onclick = async () => {
+      const sp = new Pong('single-player', this.router);
+      const ss = await sp.render();
+      container.innerHTML = '';
+      container.appendChild(ss);
+    };
+
+
+
 
     return container;
   }

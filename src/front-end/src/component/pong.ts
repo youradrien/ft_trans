@@ -1,42 +1,52 @@
 import Page from '../template/page.ts';
 
+
 export default class SinglePong extends Page {
+  private multiplayer: boolean;
+  private socket?: WebSocket;
+
+
+  constructor(id: string, router: { navigate: (path: string) => void }, options?: any) {
+    super(id, router, options); // ✅ Pass required args
+    this.multiplayer = options?.multiplayer ?? false;
+    this.socket = options?.socket;
+  }
+
   async render(): Promise<HTMLElement> {
-    const container = document.createElement('div');
-    container.id = this.id;
+    const CONTAINER = document.createElement('div');
+    CONTAINER.id = this.id;
 
-    const scoreContainer = document.createElement('div');
-    scoreContainer.style.display = 'flex';
-    scoreContainer.style.justifyContent = 'space-between';
-    scoreContainer.style.width = '800px';
-    scoreContainer.style.marginBottom = '1rem';
-    scoreContainer.style.fontSize = '2rem';
+    const _score = document.createElement('div');
+    _score.style.display = 'flex';
+    _score.style.justifyContent = 'space-between';
+    _score.style.width = '800px';
+    _score.style.marginBottom = '1rem';
+    _score.style.fontSize = '2rem';
 
-    const player1ScoreEl = document.createElement('span');
-    player1ScoreEl.id = 'player1-score';
-    player1ScoreEl.textContent = 'Player 1: 0';
-    scoreContainer.appendChild(player1ScoreEl);
+    const p1 = document.createElement('span');
+    p1.id = 'player1-score';
+    p1.textContent = 'Player 1: 0';
+    _score.appendChild(p1);
 
-    const player2ScoreEl = document.createElement('span');
-    player2ScoreEl.id = 'player2-score';
-    player2ScoreEl.textContent = 'Player 2: 0';
-    scoreContainer.appendChild(player2ScoreEl);
-    container.appendChild(scoreContainer);
-    const canvas = document.createElement('canvas');
-    canvas.id = 'pongCanvas';
-    canvas.width = 900;  // Set your desired width
-    canvas.height = 600; // Set your desired height
-    container.appendChild(canvas);
+    const p2 = document.createElement('span');
+    p2.id = 'player2-score';
+    p2.textContent = 'Player 2: 0';
+    _score.appendChild(p2);
+    CONTAINER.appendChild(_score);
+    const c = document.createElement('canvas');
+    c.id = 'pongCanvas';
+    c.width = 900;  // Set your desired width
+    c.height = 600; // Set your desired height
+    CONTAINER.appendChild(c);
 
     // Start button
     const startButton = document.createElement('button');
     startButton.textContent = 'Start Game';
     startButton.id = 'startGameBtn';
-    container.appendChild(startButton);
+    CONTAINER.appendChild(startButton);
 
-    this.initPong(canvas, startButton, player1ScoreEl, player2ScoreEl);
-
-    return container;
+    this.initPong(c, startButton, p1, p2);
+    return CONTAINER;
   }
 
   private initPong(canvas: HTMLCanvasElement, startButton: HTMLButtonElement, p1ScoreEl: HTMLElement, p2ScoreEl: HTMLElement): void {
@@ -63,21 +73,21 @@ export default class SinglePong extends Page {
     };
 
     const PONG_ART = 
-`██████╗ ███████╗███╗   ██╗ ██████╗ 
-██╔══██╗██║   ██║████╗  ██║██╔════╝ 
-██████╔╝██║   ██║██╔██╗ ██║██║  ███╗
-██╔═══╝ ██║   ██║██║╚██╗██║██║   ██║
-██║     ╚██████╔╝██║ ╚████║╚██████╔╝
-╚═╝      ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝`;
+      `██████╗ ███████╗███╗   ██╗ ██████╗ 
+      ██╔══██╗██║   ██║████╗  ██║██╔════╝ 
+      ██████╔╝██║   ██║██╔██╗ ██║██║  ███╗
+      ██╔═══╝ ██║   ██║██║╚██╗██║██║   ██║
+      ██║     ╚██████╔╝██║ ╚████║╚██████╔╝
+      ╚═╝      ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝`;
 
     startButton.addEventListener('click', () => {
       if (!gameStarted) {
         gameStarted = true;
-        resetBall(true);
+        reset_ball(true);
       }
     });
 
-    const resetBall = (initialReset = false) => {
+    const reset_ball = (initialReset = false) => {
       gameState.ball.x = canvas.width / 2;
       gameState.ball.y = canvas.height / 2;
       // Alternate starting direction
@@ -108,24 +118,24 @@ export default class SinglePong extends Page {
       }
 
       // Ball collision with paddles
-      handlePaddleCollision(gameState.paddles.player1Y, 20 + PADDLE_WIDTH, 1);
-      handlePaddleCollision(gameState.paddles.player2Y, canvas.width - 30, -1);
+      _paddle_collision(gameState.paddles.player1Y, 20 + PADDLE_WIDTH, 1);
+      _paddle_collision(gameState.paddles.player2Y, canvas.width - 30, -1);
 
       // Score detection
       if (gameState.ball.x + BALL_RADIUS > canvas.width) {
         gameState.score.player1++;
         p1ScoreEl.textContent = `Player 1: ${gameState.score.player1}`;
         gameStarted = false;
-        resetBall();
+        reset_ball();
       } else if (gameState.ball.x - BALL_RADIUS < 0) {
         gameState.score.player2++;
         p2ScoreEl.textContent = `Player 2: ${gameState.score.player2}`;
         gameStarted = false;
-        resetBall();
+        reset_ball();
       }
     };
 
-    const handlePaddleCollision = (paddleY: number, paddleX: number, direction: 1 | -1) => {
+    const _paddle_collision = (paddleY: number, paddleX: number, direction: 1 | -1) => {
       const ball = gameState.ball;
       const paddleCollision =
         direction === 1
@@ -148,13 +158,12 @@ export default class SinglePong extends Page {
 
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Draw field
+      // field
       ctx.strokeStyle = 'white';
       ctx.lineWidth = 5;
       ctx.strokeRect(0, 0, canvas.width, canvas.height);
 
-      // Draw PONG title with transparency
+      // PONG title with transparency
       ctx.save();
       ctx.globalAlpha = 0.2;
       ctx.fillStyle = 'white';
@@ -167,14 +176,12 @@ export default class SinglePong extends Page {
         ctx.fillText(line, canvas.width / 2, startY + (index * lineHeight));
       });
       ctx.restore();
-
-      // Draw ball
+      // ball
       ctx.fillStyle = 'white';
       ctx.beginPath();
       ctx.arc(gameState.ball.x, gameState.ball.y, BALL_RADIUS, 0, Math.PI * 2);
       ctx.fill();
-
-      // Draw paddles
+      // paddles
       ctx.fillRect(20, gameState.paddles.player1Y, PADDLE_WIDTH, PADDLE_HEIGHT);
       ctx.fillRect(canvas.width - 30, gameState.paddles.player2Y, PADDLE_WIDTH, PADDLE_HEIGHT);
     };
@@ -190,7 +197,7 @@ export default class SinglePong extends Page {
       if (e.key === ' ' && isDown && !gameStarted) {
         e.preventDefault(); // Prevent scrolling
         gameStarted = true;
-        resetBall(true);
+        reset_ball(true);
       }
       // Check for movement keys
       else if (e.key === 'w' || e.key === 's' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
